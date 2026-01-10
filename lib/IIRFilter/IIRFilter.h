@@ -44,14 +44,14 @@ public:
     float applyConstrained(const float input, const float yMin, const float yMax);
 
 private:
-    struct IIRFilterParams{
-        unsigned order;
-        float A[2]; // [a1, a2], a0 is always 1.0
-        float B[3]; // [b0, b1, b2]
-        float w[2]; // [w1, w2]
-    } filter;
+    struct IIRFilterParams {
+        unsigned order{0};
+        double A[2]{0.0, 0.0};      // [a1, a2], a0 is always 1.0
+        double B[3]{0.0, 0.0, 0.0}; // [b0, b1, b2]
+        double w[2]{0.0, 0.0};      // [w1, w2]
+    } filter{};
 
-    void applyFilterUpdate(const float input, const float output);
+    void applyFilterUpdate(const double input, const double output);
 };
 
 #endif /* IIR_FILTER_H_ */

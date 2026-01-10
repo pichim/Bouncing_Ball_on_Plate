@@ -1,9 +1,9 @@
 #include "IIRFilter.h"
 
-#include <math.h>
+#include <cmath>
 
-#ifndef M_PIf
-    #define M_PIf 3.14159265358979323846f // pi
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846 // pi
 #endif
 
 // Integrator
@@ -19,11 +19,11 @@ void IIRFilter::integratorInit(const float Ts)
 
 void IIRFilter::integratorUpdate(const float Ts)
 {
-    filter.B[0] = Ts;
-    filter.B[1] = 0.0f;
-    filter.B[2] = 0.0f;
-    filter.A[0] = -1.0f;
-    filter.A[1] = 0.0f;
+    filter.B[0] = static_cast<double>(Ts);
+    filter.B[1] = 0.0;
+    filter.B[2] = 0.0;
+    filter.A[0] = -1.0;
+    filter.A[1] = 0.0;
 }
 
 // Differentiator
@@ -39,11 +39,12 @@ void IIRFilter::differentiatorInit(const float Ts)
 
 void IIRFilter::differentiatorUpdate(const float Ts)
 {
-    filter.B[0] = 1.0f / Ts;
-    filter.B[1] = -1.0f / Ts;
-    filter.B[2] = 0.0f;
-    filter.A[0] = 0.0f;
-    filter.A[1] = 0.0f;
+    const double invTs = 1.0 / static_cast<double>(Ts);
+    filter.B[0] = invTs;
+    filter.B[1] = -invTs;
+    filter.B[2] = 0.0;
+    filter.A[0] = 0.0;
+    filter.A[1] = 0.0;
 }
 
 // First Order Lowpass Filter
@@ -59,11 +60,11 @@ void IIRFilter::lowPass1Init(const float fcut, const float Ts)
 
 void IIRFilter::lowPass1Update(const float fcut, const float Ts)
 {
-    filter.A[1] = 0.0f;
-    filter.B[0] = 1.0f - expf(-Ts * 2.0f * M_PIf * fcut);
-    filter.B[1] = 0.0f;
-    filter.B[2] = 0.0f;
-    filter.A[0] = filter.B[0] - 1.0f;
+    filter.A[1] = 0.0;
+    filter.B[0] = 1.0 - exp(-static_cast<double>(Ts) * 2.0 * M_PI * static_cast<double>(fcut));
+    filter.B[1] = 0.0;
+    filter.B[2] = 0.0;
+    filter.A[0] = filter.B[0] - 1.0;
 }
 
 void IIRFilter::differentiatingLowPass1Init(const float fcut, const float Ts)
@@ -75,12 +76,12 @@ void IIRFilter::differentiatingLowPass1Init(const float fcut, const float Ts)
 
 void IIRFilter::differentiatingLowPass1Update(const float fcut, const float Ts)
 {
-    const float b0 = 1.0f - expf(-Ts * 2.0f * M_PIf * fcut);
-    filter.A[1] = 0.0f;
-    filter.B[0] = b0 / Ts;
+    const double b0 = 1.0 - exp(-static_cast<double>(Ts) * 2.0 * M_PI * static_cast<double>(fcut));
+    filter.A[1] = 0.0;
+    filter.B[0] = b0 / static_cast<double>(Ts);
     filter.B[1] = -filter.B[0];
-    filter.B[2] = 0.0f;
-    filter.A[0] = b0 - 1.0f;
+    filter.B[2] = 0.0;
+    filter.A[0] = b0 - 1.0;
 }
 
 // First Order Lead or Lag Filter
@@ -96,15 +97,15 @@ void IIRFilter::leadLag1Init(const float fZero, const float fPole, const float T
 
 void IIRFilter::leadLag1Update(const float fZero, const float fPole, const float Ts)
 {
-    const float wZero = (2.0f / Ts) * tanf(M_PIf * fZero * Ts);
-    const float wPole = (2.0f / Ts) * tanf(M_PIf * fPole * Ts);
-    const float k = 1.0f / (Ts * wPole + 2.0f);
+    const double wZero = (2.0 / static_cast<double>(Ts)) * tan(M_PI * static_cast<double>(fZero) * static_cast<double>(Ts));
+    const double wPole = (2.0 / static_cast<double>(Ts)) * tan(M_PI * static_cast<double>(fPole) * static_cast<double>(Ts));
+    const double k = 1.0 / (static_cast<double>(Ts) * wPole + 2.0);
 
-    filter.B[0] = wPole * (Ts*wZero + 2.0f) / wZero * k;
-    filter.B[1] = wPole * (Ts*wZero - 2.0f) / wZero * k;
-    filter.B[2] = 0.0f;
-    filter.A[0] = (Ts * wPole - 2.0f) * k;
-    filter.A[1] = 0.0f;
+    filter.B[0] = wPole * (static_cast<double>(Ts) * wZero + 2.0) / wZero * k;
+    filter.B[1] = wPole * (static_cast<double>(Ts) * wZero - 2.0) / wZero * k;
+    filter.B[2] = 0.0;
+    filter.A[0] = (static_cast<double>(Ts) * wPole - 2.0) * k;
+    filter.A[1] = 0.0;
 }
 
 void IIRFilter::phaseComp1Init(const float fCenter, const float phaseLift, const float Ts)
@@ -116,12 +117,12 @@ void IIRFilter::phaseComp1Init(const float fCenter, const float phaseLift, const
 
 void IIRFilter::phaseComp1Update(const float fCenter, const float phaseLift, const float Ts)
 {
-    const float sn = sin(M_PIf / 180.0f * phaseLift);
-    const float k = sqrtf((1.0f - sn) / (1.0f + sn));
-    const float fZero = fCenter * k;
-    const float fPole = fCenter / k;
+    const double sn = sin(M_PI / 180.0 * static_cast<double>(phaseLift));
+    const double k = sqrt((1.0 - sn) / (1.0 + sn));
+    const double fZero = static_cast<double>(fCenter) * k;
+    const double fPole = static_cast<double>(fCenter) / k;
 
-    leadLag1Update(fZero, fPole, Ts);
+    leadLag1Update(static_cast<float>(fZero), static_cast<float>(fPole), Ts);
 }
 
 // Second Order Notch Filter
@@ -138,15 +139,15 @@ void IIRFilter::notchInit(const float fcut, const float D, const float Ts)
 void IIRFilter::notchUpdate(const float fcut, const float D, const float Ts)
 {
     // prewarp is done implicitly
-    const float omega = 2.0f * M_PIf * fcut * Ts;
-    const float sn = sinf(omega);
-    const float cs = cosf(omega);
+    const double omega = 2.0 * M_PI * static_cast<double>(fcut) * static_cast<double>(Ts);
+    const double sn = sin(omega);
+    const double cs = cos(omega);
 
-    filter.B[0] = 1.0f / (1.0f + D * sn);
-    filter.B[1] = -2.0f * cs * filter.B[0];
+    filter.B[0] = 1.0 / (1.0 + static_cast<double>(D) * sn);
+    filter.B[1] = -2.0 * cs * filter.B[0];
     filter.B[2] = filter.B[0];
     filter.A[0] = filter.B[1];
-    filter.A[1] = (1.0f - D * sn) * filter.B[0];
+    filter.A[1] = (1.0 - static_cast<double>(D) * sn) * filter.B[0];
 }
 
 // Second Order Lowpass Filter
@@ -162,14 +163,14 @@ void IIRFilter::lowPass2Init(const float fcut, const float D, const float Ts)
 
 void IIRFilter::lowPass2Update(const float fcut, const float D, const float Ts)
 {
-    const float wcut = 2.0f * M_PIf * fcut;
-    const float k1 = 2.0f * D * Ts * wcut;
-        
-    filter.A[1] = 1.0f / (Ts * Ts * wcut * wcut + k1 + 1.0f);
-    filter.B[0] = 1.0f - filter.A[1] * (1.0f + k1);
-    filter.B[1] = 0.0f;
-    filter.B[2] = 0.0f;
-    filter.A[0] = filter.B[0] - 1.0f - filter.A[1];
+    const double wcut = 2.0 * M_PI * static_cast<double>(fcut);
+    const double k1 = 2.0 * static_cast<double>(D) * static_cast<double>(Ts) * wcut;
+
+    filter.A[1] = 1.0 / (static_cast<double>(Ts) * static_cast<double>(Ts) * wcut * wcut + k1 + 1.0);
+    filter.B[0] = 1.0 - filter.A[1] * (1.0 + k1);
+    filter.B[1] = 0.0;
+    filter.B[2] = 0.0;
+    filter.A[0] = filter.B[0] - 1.0 - filter.A[1];
 }
 
 // Second Order Lead or Lag Filter
@@ -186,28 +187,30 @@ void IIRFilter::leadLag2Init(const float fZero, const float DZero, const float f
 void IIRFilter::leadLag2Update(const float fZero, const float DZero, const float fPole, const float DPole, const float Ts)
 {
     // prewarp is done implicitly
-    const float omegaZero = 2.0f * M_PIf * fZero * Ts;
-    const float snZero = sinf(omegaZero);
-    const float csZero = cosf(omegaZero);
-    const float omegaPole = 2.0f * M_PIf * fPole * Ts;
-    const float snPole = sinf(omegaPole);
-    const float csPole = cosf(omegaPole);
-    const float k0 = 1.0f / (1.0f + DPole * snPole);
-    const float k1 = k0 * (csPole - 1.0f) / (csZero - 1.0f);
-                
-    filter.B[0] = (1.0f + DZero * snZero) * k1;
-    filter.B[1] = -2.0f * csZero * k1;
-    filter.B[2] = (1.0f - DZero * snZero) * k1;
-    filter.A[0] = -2.0f * csPole * k0;
-    filter.A[1] = (1.0f - DPole * snPole) * k0;
-    // filter.A[1] = filter.B[0] + filter.B[1] + filter.B[2] - 1.0f - filter.A[0];
+    const double omegaZero = 2.0 * M_PI * static_cast<double>(fZero) * static_cast<double>(Ts);
+    const double snZero = sin(omegaZero);
+    const double csZero = cos(omegaZero);
+    const double omegaPole = 2.0 * M_PI * static_cast<double>(fPole) * static_cast<double>(Ts);
+    const double snPole = sin(omegaPole);
+    const double csPole = cos(omegaPole);
+    const double k0 = 1.0 / (1.0 + static_cast<double>(DPole) * snPole);
+    const double k1 = k0 * (csPole - 1.0) / (csZero - 1.0);
+
+    filter.B[0] = (1.0 + static_cast<double>(DZero) * snZero) * k1;
+    filter.B[1] = -2.0 * csZero * k1;
+    filter.B[2] = (1.0 - static_cast<double>(DZero) * snZero) * k1;
+    filter.A[0] = -2.0 * csPole * k0;
+    filter.A[1] = (1.0 - static_cast<double>(DPole) * snPole) * k0;
 }
 
 void IIRFilter::reset(const float output)
 {
-    filter.w[0] = output * (1.0f - filter.B[0]);
-    if (filter.order == 2)
-        filter.w[1] = filter.w[0] + output * (filter.A[0] - filter.B[1]);
+    // Choose internal state so that a constant input yields 'output'
+    // as the steady-state output (given current A/B).
+    filter.w[0] = static_cast<double>(output) * (1.0 - filter.B[0]);
+    if (filter.order == 2) {
+        filter.w[1] = filter.w[0] + static_cast<double>(output) * (filter.A[0] - filter.B[1]);
+    }
 }
 
 // Assuming a constant input, differentiating results in zero output
@@ -215,30 +218,28 @@ void IIRFilter::reset(const float output)
 
 void IIRFilter::resetDifferentingFilterToZero(const float output)
 {
-    filter.w[0] = output * filter.B[1];
+    filter.w[0] = static_cast<double>(output) * filter.B[1];
 }
 
 float IIRFilter::apply(const float input)
 {
-    const float output = filter.B[0] * input + filter.w[0];
-    applyFilterUpdate(input, output);
-
-    return output;
+    const double output = filter.B[0] * static_cast<double>(input) + filter.w[0];
+    applyFilterUpdate(static_cast<double>(input), output);
+    return static_cast<float>(output);
 }
 
 float IIRFilter::applyConstrained(const float input, const float yMin, const float yMax)
 {
     // constrain output
-    const float outputUnconstrained = filter.B[0] * input + filter.w[0];
-    const float output = (outputUnconstrained < yMin) ? yMin
-                       : (outputUnconstrained > yMax) ? yMax
-                       :  outputUnconstrained;
-    applyFilterUpdate(input, output);
-
-    return output;
+    const double outputUnconstrained = filter.B[0] * static_cast<double>(input) + filter.w[0];
+    const double output = (outputUnconstrained < static_cast<double>(yMin)) ? static_cast<double>(yMin)
+                        : (outputUnconstrained > static_cast<double>(yMax)) ? static_cast<double>(yMax)
+                        :  outputUnconstrained;
+    applyFilterUpdate(static_cast<double>(input), output);
+    return static_cast<float>(output);
 }
 
-void IIRFilter::applyFilterUpdate(const float input, const float output)
+void IIRFilter::applyFilterUpdate(const double input, const double output)
 {
     // https://dsp.stackexchange.com/questions/72575/transposed-direct-form-ii
     for (unsigned i = 0; i < filter.order - 1; ++i) {

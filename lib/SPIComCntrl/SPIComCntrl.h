@@ -3,27 +3,35 @@
 
 #include "mbed.h"
 
-#include "PESBoardPinMap.h"
+// #include "PESBoardPinMap.h"
 
-#include "DCMotor.h"
 #include "IMU.h"
+#include "RealTimeThread.h"
 #include "SPISlaveDMA.h"
-#include "ThreadFlag.h"
+#include "Servo.h"
 
-#include <Eigen/Dense>
-
-class SPIComCntrl
+class SPIComCntrl : public RealTimeThread
 {
 public:
-    explicit SPIComCntrl();
+    explicit SPIComCntrl(PinName spi_mosi_pin,
+                         PinName spi_miso_pin,
+                         PinName spi_sck_pin,
+                         PinName spi_nss_pin,
+                         osPriority spi_priority,
+                         uint32_t spi_stack_size,
+                         PinName imu_sda_pin,
+                         PinName imu_scl_pin,
+                         PinName servo_d0_pin,
+                         PinName servo_d1_pin,
+                         PinName servo_d2_pin,
+                         uint32_t period_us,
+                         osPriority priority,
+                         uint32_t stack_size);
     virtual ~SPIComCntrl();
 
 private:
-    static constexpr int64_t PERIOD_MUS = 1000;
-
-    Thread m_Thread;
-    Ticker m_Ticker;
-    ThreadFlag m_ThreadFlag;
+    static constexpr float SERVO_PULSE_MIN = 0.0325f;
+    static constexpr float SERVO_PULSE_MAX = 0.1175f;
 
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;
@@ -31,19 +39,20 @@ private:
     ImuData m_ImuData;
     IMU m_Imu;
 
-    DigitalOut m_enable_motors;
-    DCMotor m_Motor_M1;
-    DCMotor m_Motor_M2;
+    Servo m_servoD0;
+    Servo m_servoD1;
+    Servo m_servoD2;
 
-    Eigen::Matrix2f Cwheel2robot;
-    Eigen::Vector2f robot_speed_setpoint;
-    Eigen::Vector2f wheel_speed_setpoint;
-    Eigen::Vector2f robot_speed;
-    Eigen::Vector2f wheel_speed;
+    float m_Ts;
+
+    float m_servo_commands[3]{};
 
     float m_reply_data[SPI_NUM_FLOATS];
 
-    void threadTask();
-    void sendThreadFlag();
+    bool m_spi_ready{false};
+
+    void executeTask() override;
+    static float clamp(float val, float min, float max);
+    static float clamp01(float val) { return clamp(val, 0.0f, 1.0f); }
 };
 #endif /* SPI_COM_CNTRL_H_ */

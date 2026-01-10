@@ -3,6 +3,9 @@
 // Keep HAL SPI MSP init empty; class configures pins/clocks/DMA itself.
 extern "C" void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi) { (void)hspi; }
 
+// Definition for the C++14-friendly constexpr static member
+constexpr std::chrono::microseconds SpiSlaveDMA::TC_WAIT_BUDGET;
+
 // ============================ CRC-8 (poly 0x07) ==============================
 static const uint8_t CRC8_TAB[256] = {
     0x00,0x07,0x0E,0x09,0x1C,0x1B,0x12,0x15,0x38,0x3F,0x36,0x31,0x24,0x23,0x2A,0x2D,
@@ -67,8 +70,10 @@ uint32_t SpiSlaveDMA::fe_flag_for(DMA_Stream_TypeDef* s) {
 SpiSlaveDMA::SpiSlaveDMA(PinName mosi,
                          PinName miso,
                          PinName sck,
-                         PinName nss)
-    : m_Thread(osPriorityHigh2)      // raise to Realtime if you want tighter latency
+                         PinName nss,
+                         osPriority priority,
+                         uint32_t stack_size)
+    : m_Thread(priority, stack_size)
     , m_InterruptIn_NSS(nss)
     , m_MOSI(mosi)
     , m_MISO(miso)

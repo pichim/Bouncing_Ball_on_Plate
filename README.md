@@ -1,11 +1,11 @@
 # SPI COM Master
 
-Python master implementation for a **10 ms, double-transfer SPI protocol** used in a robotics control link between a **Raspberry Pi 5** (master) and an **STM32 Nucleo-F446RE** (slave, Mbed-CE). Raspberry Pi 5 with Raspberry Pi OS or Ubuntu (64-bit).
+Python master implementation for a **20 ms (default), double-transfer SPI protocol** used in a robotics control link between a **Raspberry Pi 5** (master) and an **STM32 Nucleo-F446RE** (slave, Mbed-CE). Raspberry Pi 5 with Raspberry Pi OS or Ubuntu (64-bit).
 
 ## Overview
 
 The Python code runs on the Raspberry Pi 5 to exchange **120-float frames** with the STM32 over `/dev/spidev0.0`.
-Each loop cycle (default **10 ms**) performs two SPI transfers:
+Each loop cycle (default **20 ms**) performs two SPI transfers:
 
 1. **ARM-ONLY frame** – `0x56` + zero payload + CRC
    - lets the slave re-arm and build a fresh reply.
@@ -19,7 +19,7 @@ This **double-transfer** guarantees that the second reply (`rx2`) always contain
 - **High-speed SPI** at 33 MHz (mode 0)
 - **120 × 32-bit floats** per frame (**482 bytes** total)
 - **CRC-8** (polynomial `0x07`, init `0x00`) for error detection
-- Accurate **10 ms cycle** using `time.perf_counter()`
+- Accurate **20 ms cycle (default)** using `time.perf_counter()`
 - Prints per-cycle **Busy / Sleep / Xfer1 / Xfer2** timings
 - Configurable **payload generator** via `load_tx_frame()`
 - `chrt -f 50` recommended for real-time priority
@@ -45,7 +45,7 @@ It is important to connect two GNDs (pins 6 and 20) to ensure a stable reference
 | --------------------- | ------- | --------------------------------------------- |
 | `SPI_NUM_FLOATS`      | 120     | number of float32 values in each frame        |
 | `SPI_MSG_SIZE`        | 482     | header (1) + floats (480) + CRC (1)           |
-| `main_task_period_us` | 10000   | loop period (µs) – 10 ms                      |
+| `main_task_period_us` | 20000   | loop period (µs) – 20 ms                      |
 | `ARM_GAP_US`          | 100     | micro-gap between ARM-ONLY and PUBLISH frames |
 | `spi.max_speed_hz`    | 33 MHz  | SPI bus speed                                 |
 

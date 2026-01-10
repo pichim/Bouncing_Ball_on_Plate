@@ -76,7 +76,7 @@ SPI_NUM_FLOATS = 120  # Number of float values in each message
 SPI_MSG_SIZE = 1 + SPI_NUM_FLOATS * 4 + 1  # header + floats + checksum
 
 # Main task period (like the C++ example)
-main_task_period_us = 10000
+main_task_period_us = 20000
 
 # ------------------ CHANGED: always double-transfer ------------------
 ARM_GAP_US = 100  # small gap so the slave can re-arm/build fresh TX
@@ -133,14 +133,17 @@ class SpiData:
 def load_tx_frame(tx_list, frame_idx):
     """
     Update tx_list (list of floats) in-place for this frame.
+
+    First three floats are servo setpoints, expected in [0.0, 1.0] by the Nucleo.
     """
     # Use monotonic time relative to start_time for stable phase
     t = time.perf_counter() - start_time
-    tx_list[0] = 0.2333 * math.sin(2.0 * math.pi * 0.25 * t)
-    tx_list[1] = 1.5000 * math.sin(2.0 * math.pi * 0.25 * t)
-    # k = 1.0
-    # tx_list[0] = k * 1.0
-    # tx_list[1] = k * 2.0
+    phase = 2.0 * math.pi * 0.25 * t
+
+    # Three independent waveforms in [0,1]
+    tx_list[0] = 0.5 + 0.45 * math.sin(phase)             # Servo D0 (PB_2)
+    tx_list[1] = 0.5 + 0.45 * math.sin(phase + math.pi/2) # Servo D1 (PC_8)
+    tx_list[2] = 0.5 + 0.45 * math.sin(phase + math.pi)   # Servo D2 (PC_6)
 
 
 # Initialize SPI
@@ -153,12 +156,11 @@ spi.mode = 0b00  # SPI mode 0
 transmitted_data = SpiData()
 received_data = SpiData()
 
-# Initialize transmitted data with test values
+# Initialize transmitted data with test values (servo setpoints only)
 transmitted_data.data[0] = 42.42
 transmitted_data.data[1] = 98.76
 transmitted_data.data[2] = 11.11
-transmitted_data.data[3] = 55.55
-transmitted_data.data[4] = 87.34
+# Remaining payload entries stay at zero; only the first three are used by the firmware.
 
 # ---------- OPTIMIZED: prebuild constant tx1 (header 0x56 + zero payload + CRC) ----------
 tx1 = bytearray(SPI_MSG_SIZE)
@@ -249,8 +251,8 @@ while True:
         print(
             f"Message: {received_data.message_count} | "
             f"Delta Time: {delta_time_us} us | "
-            f"Received: [{received_data.data[0]:.4f}, {received_data.data[1]:.4f}, "
-            f"{received_data.data[2]:.4f}, {received_data.data[3]:.4f}, {received_data.data[4]:.4f}] | "
+            f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
+            f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}] | "
             f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
             f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
             f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
@@ -262,8 +264,8 @@ while True:
         print(
             f"Message: {received_data.message_count} | "
             f"Delta Time: {delta_time_us} us | "
-            f"Received: [{received_data.data[0]:.4f}, {received_data.data[1]:.4f}, "
-            f"{received_data.data[2]:.4f}, {received_data.data[3]:.4f}, {received_data.data[4]:.4f}] | "
+            f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
+            f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}] | "
             f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
             f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
             f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"

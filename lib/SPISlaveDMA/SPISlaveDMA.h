@@ -85,7 +85,12 @@ public:
 class SpiSlaveDMA {
 public:
     // Public API: auto-detect SPI instance from the provided pins
-    explicit SpiSlaveDMA(PinName mosi, PinName miso, PinName sck, PinName nss);
+    explicit SpiSlaveDMA(PinName mosi,
+                         PinName miso,
+                         PinName sck,
+                         PinName nss,
+                         osPriority priority,
+                         uint32_t stack_size);
     ~SpiSlaveDMA();
 
     // Arm first DMA transfer and start the worker thread (true on success)
@@ -113,7 +118,7 @@ private:
 
     // ======================= Tunables =======================
     // Grace window after NSS rising to cover EXTI → DMA TC race
-    inline static constexpr microseconds TC_WAIT_BUDGET{200};
+    static constexpr microseconds TC_WAIT_BUDGET{200};
     // Max consecutive arm failures before a peripheral reset
     static constexpr uint32_t MAX_CONSECUTIVE_FAILURES = 20;
 
