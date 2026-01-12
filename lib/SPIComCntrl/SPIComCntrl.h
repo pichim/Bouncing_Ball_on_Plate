@@ -1,32 +1,20 @@
 #ifndef SPI_COM_CNTRL_H_
 #define SPI_COM_CNTRL_H_
 
-#include "mbed.h"
-
-// #include "PESBoardPinMap.h"
-
 #include "IMU.h"
 #include "RealTimeThread.h"
 #include "SPISlaveDMA.h"
+#include "SerialStream.h"
 #include "Servo.h"
+#include "config.h"
+#include "mbed.h"
+
+using namespace std::chrono;
 
 class SPIComCntrl : public RealTimeThread
 {
 public:
-    explicit SPIComCntrl(PinName spi_mosi_pin,
-                         PinName spi_miso_pin,
-                         PinName spi_sck_pin,
-                         PinName spi_nss_pin,
-                         osPriority spi_priority,
-                         uint32_t spi_stack_size,
-                         PinName imu_sda_pin,
-                         PinName imu_scl_pin,
-                         PinName servo_d0_pin,
-                         PinName servo_d1_pin,
-                         PinName servo_d2_pin,
-                         uint32_t period_us,
-                         osPriority priority,
-                         uint32_t stack_size);
+    explicit SPIComCntrl();
     virtual ~SPIComCntrl();
 
 private:
@@ -42,6 +30,10 @@ private:
     Servo m_servoD0;
     Servo m_servoD1;
     Servo m_servoD2;
+
+    SerialStream m_SerialStream;
+    Timer m_Timer;
+    microseconds m_time_previous_us{0};
 
     float m_Ts;
 

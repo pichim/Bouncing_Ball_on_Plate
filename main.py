@@ -72,7 +72,7 @@ SPI_HEADER_MASTER = 0x55  # Raspberry Pi header: PUBLISH (second transfer)
 SPI_HEADER_MASTER_ARM = 0x56  # Raspberry Pi header: ARM-ONLY (first transfer)
 SPI_HEADER_SLAVE = 0x45  # Nucleo header
 
-SPI_NUM_FLOATS = 120  # Number of float values in each message
+SPI_NUM_FLOATS = 30  # Number of float values in each message
 SPI_MSG_SIZE = 1 + SPI_NUM_FLOATS * 4 + 1  # header + floats + checksum
 
 # Main task period (like the C++ example)
@@ -252,7 +252,8 @@ while True:
             f"Message: {received_data.message_count} | "
             f"Delta Time: {delta_time_us} us | "
             f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
-            f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}] | "
+            f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}; "
+            f"acc: {received_data.data[6]:.4f}, {received_data.data[7]:.4f}, {received_data.data[8]:.4f}] | "
             f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
             f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
             f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
@@ -265,7 +266,8 @@ while True:
             f"Message: {received_data.message_count} | "
             f"Delta Time: {delta_time_us} us | "
             f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
-            f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}] | "
+            f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}; "
+            f"acc: {received_data.data[6]:.4f}, {received_data.data[7]:.4f}, {received_data.data[8]:.4f}] | "
             f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
             f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
             f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"

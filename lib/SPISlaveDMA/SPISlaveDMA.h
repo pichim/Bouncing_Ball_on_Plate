@@ -52,7 +52,7 @@ using namespace std::chrono;
 #define SPI_HEADER_MASTER   0x55 // publish (Pi->STM)
 #define SPI_HEADER_MASTER2  0x56 // arm-only (Pi->STM), do NOT publish
 #define SPI_HEADER_SLAVE    0x45 // data-from-STM (STM->Pi)
-#define SPI_NUM_FLOATS      120
+#define SPI_NUM_FLOATS      30
 #define SPI_MSG_SIZE        (1 + SPI_NUM_FLOATS * 4 + 1) // header + floats + crc
 
 // ----------------------------- SpiData (app-facing) ---------------------------
