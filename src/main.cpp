@@ -3,8 +3,7 @@
 #include "mbed.h"
 
 // TODOs:
-// - Resolve warnings in main.py
-// - Clean up project
+// - Start with understanding this project
 
 int main()
 {

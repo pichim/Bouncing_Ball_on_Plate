@@ -1,69 +1,48 @@
-# SPI COM Master
+# Bouncing Ball on Plate
 
-Python master implementation for a **20 ms (default), double-transfer SPI protocol** used in a robotics control link between a **Raspberry Pi 5** (master) and an **STM32 Nucleo-F446RE** (slave, Mbed-CE). Raspberry Pi 5 with Raspberry Pi OS or Ubuntu (64-bit).
+Firmware for the Nucleo F446RE running a 1 kHz control loop with SPI-DMA slave I/O to a Raspberry Pi 5, MPU6500 IMU, three servos, and an optional high-speed UART logging stream.
 
-## Overview
+## Hardware
 
-The Python code runs on the Raspberry Pi 5 to exchange **120-float frames** with the STM32 over `/dev/spidev0.0`.
-Each loop cycle (default **20 ms**) performs two SPI transfers:
+- MCU: Nucleo-F446RE (Mbed)
+- Master: Raspberry Pi 5 (SPI master)
+- IMU: MPU6500 on I2C (PB_9/PB_8)
+- Servos: PB_2, PC_8, PC_6 (20 ms PWM)
+- SPI2 slave: MOSI PC_3, MISO PC_2, SCK PB_10, NSS PB_12 (DMA)
+- UART log: PA_9 / PA_10 at 2 Mbps (SerialStream start-byte gated)
 
-1. **ARM-ONLY frame** – `0x56` + zero payload + CRC
-   - lets the slave re-arm and build a fresh reply.
-2. **PUBLISH frame** – `0x55` + actual float payload + CRC
-   - triggers the slave to send back the fresh data.
+## Firmware layout
 
-This **double-transfer** guarantees that the second reply (`rx2`) always contains an up-to-date data set from the slave.
+- src/main.cpp: boots and enables `SPIComCntrl` thread.
+- lib/SPIComCntrl: 1 kHz realtime thread, bridges SPI frames to servo outputs and IMU telemetry.
+- lib/SPISlaveDMA: DMA-based SPI slave with CRC-8 and double-transfer handshake (0x56 arm, 0x55 publish).
+- lib/IMU: MPU6500 driver + filters + Mahony AHRS.
+- lib/SerialStream: optional UART logger (start-byte triggered).
+- lib/Servo: FastPWM-based servo driver (single-threaded, no mutex).
+- include/config.h: pins, thread periods, filter settings, UART pins.
 
-## Features
+## Data link (SPI)
 
-- **High-speed SPI** at 33 MHz (mode 0)
-- **120 × 32-bit floats** per frame (**482 bytes** total)
-- **CRC-8** (polynomial `0x07`, init `0x00`) for error detection
-- Accurate **20 ms cycle (default)** using `time.perf_counter()`
-- Prints per-cycle **Busy / Sleep / Xfer1 / Xfer2** timings
-- Configurable **payload generator** via `load_tx_frame()`
-- `chrt -f 50` recommended for real-time priority
+- Payload: 30 floats. First 3 = servo setpoints in [0,1].
+- Reply fields populated: setpoints, gyro (rad/s), acc (m/s²), RPY (rad) in first 13 floats; remainder zero.
+- Protocol: Master sends 0x56 (arm) then 0x55 (publish). CRC-8 (poly 0x07) over header+payload.
 
-## Wiring (Pi J8 → Nucleo-F446RE)
+## Logging (UART)
 
-| Raspberry Pi 5 Pin | Function              | Nucleo F446RE Pin |
-| ------------------ | --------------------- | ----------------- |
-| 5V (PIN 2)         | Optional Power Supply | E5V               |
-| GND (PIN 6)        | First GND             | GND below E5V     |
-|                    |                       |                   |
-| GPIO10 (Pin 19)    | MOSI                  | PC_3              |
-| GND    (Pin 20)    | Second GND            | GND below AVDD    |
-| GPIO9  (Pin 21)    | MISO                  | PC_2              |
-| GPIO11 (Pin 23)    | SCLK                  | PB_10             |
-| GPIO8  (Pin 24)    | CS (CE0)              | PB_12             |
+- SerialStream transmits only after receiving start byte 255. Sends one byte with float-count, then the floats.
 
-It is important to connect two GNDs (pins 6 and 20) to ensure a stable reference.
+## Build & flash
 
-## Key Parameters
+- Tooling: PlatformIO, untested with Mbed Studio.
 
-| Variable              | Default | Description                                   |
-| --------------------- | ------- | --------------------------------------------- |
-| `SPI_NUM_FLOATS`      | 120     | number of float32 values in each frame        |
-| `SPI_MSG_SIZE`        | 482     | header (1) + floats (480) + CRC (1)           |
-| `main_task_period_us` | 20000   | loop period (µs) – 20 ms                      |
-| `ARM_GAP_US`          | 100     | micro-gap between ARM-ONLY and PUBLISH frames |
-| `spi.max_speed_hz`    | 33 MHz  | SPI bus speed                                 |
+## Defaults / tuning
 
-## Tuning
-
-- **ARM_GAP_US** – adjust if you see “Failed” frames (e.g., 150 µs or 200 µs).
-- **spi.max_speed_hz** – reduce if CRC errors appear (e.g., 25 MHz).
-- **Printing frequency** – to reduce load, print every _N_-th frame for long runs.
+- Loop period: 1 ms (`BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US`).
+- IMU filters: 60 Hz gyro/acc; 1000-sample skip, 1000-sample bias avg; optional static acc bias.
+- Servo pulse bounds: 0.0325–0.1175 (normalized mapping).
+- SPI payload length and UART logging buffer both capped at 30 floats.
 
 ## Notes
 
-- Protocol is **master-driven**: the Pi always initiates both transfers.
-- Only the **second reply** (`rx2`) is used; `rx1` is ignored.
-- CRC failures or wrong headers increment `failed_count` but do not stop the loop.
-- Tested on **Raspberry Pi 5 + Nucleo F446RE** with Mbed-CE SPI-DMA slave.
-
-## Run
-
-```bash
-sudo chrt -f 50 python3 /home/pi/GIT_repositories/SPI_COM_Master/main.py
-```
+- Change pins and timing in `include/config.h` to retarget hardware.
+- If IMU scale factors look zeroed, verify MPU6500 WHO_AM_I and I2C wiring.
