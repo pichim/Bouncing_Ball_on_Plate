@@ -74,3 +74,21 @@ subplot(312)
 plot(data.time, data.values(:, ind.acc))
 subplot(313)
 plot(data.time, data.values(:, ind.rpy))
+
+
+%%
+
+addpath mahony/
+
+para.kp = 0.1592 * 2.0 * pi;
+para.ki = 0.0;
+
+rpy0 = data.values(1, ind.rpy);
+quat0 = rpy2quat(rpy0).';
+
+[quatRP , biasRP] = mahonyRP(data.values(:,ind.gyro ), data.values(:,ind.acc), para, Ts, quat0);
+
+rpyRP  = quat2rpy(quatRP );
+
+figure(4)
+plot(data.time, [data.values(:, ind.rpy), rpyRP])
