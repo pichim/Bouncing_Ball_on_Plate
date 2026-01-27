@@ -46,3 +46,7 @@ Firmware for the Nucleo F446RE running a 1 kHz control loop with SPI-DMA slave I
 
 - Change pins and timing in `include/config.h` to retarget hardware.
 - If IMU scale factors look zeroed, verify MPU6500 WHO_AM_I and I2C wiring.
+
+## Run on the Raspberry Pi
+
+Run: `sudo chrt -f 50 python python/main.py`
