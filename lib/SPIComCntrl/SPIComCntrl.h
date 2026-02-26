@@ -2,6 +2,7 @@
 #define SPI_COM_CNTRL_H_
 
 #include "IMU.h"
+#include "PIDCntrl.h"
 #include "RealTimeThread.h"
 #include "SPISlaveDMA.h"
 #include "SerialStream.h"
@@ -20,6 +21,15 @@ public:
 private:
     static constexpr float SERVO_PULSE_MIN = 0.0325f;
     static constexpr float SERVO_PULSE_MAX = 0.1175f;
+    static constexpr float BALL_POS_MIN_PX = 0.0f;
+    static constexpr float BALL_POS_MAX_PX = 640.0f;
+    static constexpr float BALL_POS_CENTER_PX = 320.0f;
+    static constexpr float SERVO_CENTER = 0.5f;
+    static constexpr float SERVO_DELTA_LIMIT = 0.45f;
+    static constexpr float BALL_CTRL_KP = 0.8f;
+    static constexpr float BALL_CTRL_KI = 0.0f;
+    static constexpr float BALL_CTRL_KD = 0.08f;
+    static constexpr float BALL_CTRL_TAU_D_S = 0.03f;
 
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;
@@ -36,6 +46,7 @@ private:
     microseconds m_time_previous_us{0};
 
     float m_Ts;
+    PIDCntrl m_ballPosCntrl;
 
     float m_servo_commands[3]{};
 
