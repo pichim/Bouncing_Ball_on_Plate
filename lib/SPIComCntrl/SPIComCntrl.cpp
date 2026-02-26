@@ -101,6 +101,8 @@ void SPIComCntrl::executeTask()
         //        m_spiData.failed_count,
         //        m_spiData.readout_time_us);
 
+        printf("pixel_x = %.1f\n", m_spiData.data[0]);
+
         // SPI payload interpretation:
         // data[0] = ball x-position in pixels [0, 640]
         // Use a PD controller to keep the ball near the center (320 px) on Servo D0.
