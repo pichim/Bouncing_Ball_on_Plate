@@ -37,7 +37,7 @@ static float fake_ball_position(float t_s) {
 	return amplitude_m * sinf(omega * t_s);
 }
 
-int main() {
+int test_servo_control() {
 	constexpr bool use_pid = false;
 
 	constexpr float Ts_s = 1.0f / 60.0f;
