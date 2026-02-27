@@ -68,6 +68,12 @@ SPIComCntrl::~SPIComCntrl() = default;
 
 void SPIComCntrl::executeTask()
 {
+    static uint32_t debug_counter = 0;
+    if (++debug_counter >= 500) {
+        printf("alive\n");
+        debug_counter = 0;
+    }
+
     // Return early if SPI not ready
     if (!m_spi_ready) {
         return;
