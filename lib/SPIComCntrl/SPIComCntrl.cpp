@@ -41,24 +41,6 @@ SPIComCntrl::SPIComCntrl()
         m_servoD2.enable();
     }
 
-    m_servo_commands[0] = SERVO_CENTER;
-    m_servo_commands[1] = SERVO_CENTER;
-    m_servo_commands[2] = SERVO_CENTER;
-
-    m_servoD0.setPulseWidth(m_servo_commands[0]);
-    m_servoD1.setPulseWidth(m_servo_commands[1]);
-    m_servoD2.setPulseWidth(m_servo_commands[2]);
-
-    m_ballPosCntrl.setup(BALL_CTRL_KP,
-                         BALL_CTRL_KI,
-                         BALL_CTRL_KD,
-                         BALL_CTRL_TAU_D_S,
-                         m_Ts,
-                         -SERVO_DELTA_LIMIT,
-                         SERVO_DELTA_LIMIT);
-    m_ballPosCntrl.setIntegratorLimits(0.0f, 0.0f);
-    m_ballPosCntrl.reset(0.0f);
-
     m_Timer.start();
 
     // NOTE: RealTimeThread::enable() must be called by the user after construction is complete
@@ -68,12 +50,6 @@ SPIComCntrl::~SPIComCntrl() = default;
 
 void SPIComCntrl::executeTask()
 {
-    static uint32_t debug_counter = 0;
-    if (++debug_counter >= 500) {
-        printf("alive\n");
-        debug_counter = 0;
-    }
-
     // Return early if SPI not ready
     if (!m_spi_ready) {
         return;
@@ -107,22 +83,10 @@ void SPIComCntrl::executeTask()
         //        m_spiData.failed_count,
         //        m_spiData.readout_time_us);
 
-        printf("pixel_x = %.1f\n", m_spiData.data[0]);
-
-        // SPI payload interpretation:
-        // data[0] = ball x-position in pixels [0, 640]
-        // Use a PD controller to keep the ball near the center (320 px) on Servo D0.
-        const float ball_pos_px = clamp(m_spiData.data[0], BALL_POS_MIN_PX, BALL_POS_MAX_PX);
-        const float ball_pos_norm = (ball_pos_px - BALL_POS_CENTER_PX) / BALL_POS_CENTER_PX;
-        const float error_norm = -ball_pos_norm;
-
-        const float servo_delta = m_ballPosCntrl.update(error_norm, ball_pos_norm);
-        m_servo_commands[0] = clamp01(SERVO_CENTER + servo_delta);
-
-        // Keep unused axes neutral for this single-axis balancing mode.
-        m_servo_commands[1] = SERVO_CENTER;
-        m_servo_commands[2] = SERVO_CENTER;
-
+        // Update servo commands from SPI payload (first three floats expected in [0,1])
+        m_servo_commands[0] = clamp01(m_spiData.data[0]);
+        m_servo_commands[1] = clamp01(m_spiData.data[1]);
+        m_servo_commands[2] = clamp01(m_spiData.data[2]);
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
         m_servoD2.setPulseWidth(m_servo_commands[2]);
