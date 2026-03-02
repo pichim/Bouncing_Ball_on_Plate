@@ -26,13 +26,16 @@ SPIComCntrl::SPIComCntrl()
     m_spi_ready = true;
     printf("SPI Communication started. Waiting for master...\n");
 
+    //create PD-T1 controller
+    m_ballPosCntrl = PIDCntrl(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, -SERVO_DELTA_LIMIT, SERVO_DELTA_LIMIT);
+
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
 
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable();
+        m_servoD0.enable(0.5f);
     }
     if (!m_servoD1.isEnabled()) {
         m_servoD1.enable();
@@ -82,9 +85,19 @@ void SPIComCntrl::executeTask()
         //        SPI_HEADER_SLAVE,
         //        m_spiData.failed_count,
         //        m_spiData.readout_time_us);
+        
+        // 1) Print Ball position (first float in SPI payload)
+        // printf("Ball Pos: %.2f px\n", m_spiData.data[0]);
 
-        // Update servo commands from SPI payload (first three floats expected in [0,1])
-        m_servo_commands[0] = clamp01(m_spiData.data[0]);
+        // 2) Calculate error between ball position and center
+        float error = BALL_POS_CENTER_PX - m_spiData.data[0];
+
+        // 3) Update Control output (PD) to get servo commands
+        float control_output = m_ballPosCntrl.update(error);
+        m_servo_commands[0] = clamp(SERVO_CENTER + control_output  , 0.48f, 0.52f);
+        
+        // 4) Update servo commands from SPI payload (first three floats expected in [0,1])
+        // m_servo_commands[0] = clamp01(m_spiData.data[0]);
         m_servo_commands[1] = clamp01(m_spiData.data[1]);
         m_servo_commands[2] = clamp01(m_spiData.data[2]);
         m_servoD0.setPulseWidth(m_servo_commands[0]);
