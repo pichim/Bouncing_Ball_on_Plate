@@ -22,14 +22,14 @@ private:
     static constexpr float SERVO_PULSE_MIN = 0.0325f;
     static constexpr float SERVO_PULSE_MAX = 0.1175f;
     static constexpr float BALL_POS_MIN_PX = 0.0f;
-    static constexpr float BALL_POS_MAX_PX = 640.0f;
-    static constexpr float BALL_POS_CENTER_PX = 320.0f;
+    static constexpr float BALL_POS_MAX_PX = 1456.0f;
+    static constexpr float BALL_POS_CENTER_PX = 728.0f;
     static constexpr float SERVO_CENTER = 0.5f;
     static constexpr float SERVO_DELTA_LIMIT = 0.45f;
-    static constexpr float BALL_CTRL_KP = 0.8f;
+    static constexpr float BALL_CTRL_KP = 45.0f;
     static constexpr float BALL_CTRL_KI = 0.0f;
-    static constexpr float BALL_CTRL_KD = 0.08f;
-    static constexpr float BALL_CTRL_TAU_D_S = 0.03f;
+    static constexpr float BALL_CTRL_KD = 4.0f;
+    static constexpr float BALL_CTRL_TAU_D_S = 0.01f;
 
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;
