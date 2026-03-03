@@ -20,7 +20,7 @@
 # |         |RAM|      |RP1|    +====
 # ||p       +---+      +---+    |USB3
 # ||c      -------              +====
-# ||i        SoC      |c|c J14     |
+# ||i        SoC      |c|c J§     |
 # (        -------  J7|s|s 12 +======
 # |  J2 bat   uart   1|i|i oo |   Net
 # | pwr\..|hd|...|hd|o|1|0    +======
@@ -244,7 +244,7 @@ while True:
         # ---------------- Second transfer: PUBLISH (0x55 + real payload) ---------
         # Load/update TX payload for this frame (no-op by default; customize later)
         #load_tx_frame(transmitted_data.data, transmitted_data.message_count)
-        transmitted_data.data[0] = x / 1000
+        transmitted_data.data[0] = x
 
         # OPTIMIZED: pack all floats in one go
         struct.pack_into("<%df" % SPI_NUM_FLOATS, tx2, 1, *transmitted_data.data)
@@ -323,7 +323,7 @@ while True:
                 f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
             )"""
         
-
+    print(received_data.data[0])
     main_task_elapsed_time_us = (time.perf_counter() - cycle_start_time) * 1_000_000.0
     remaining_us = main_task_period_us - main_task_elapsed_time_us
     if remaining_us < 0:

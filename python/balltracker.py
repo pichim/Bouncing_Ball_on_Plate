@@ -54,7 +54,7 @@ class CameraProcessor:
             pass
 
     # =========================================================
-    # Worker thread (ball detection happens here)
+    # Worker thread (ball detection)
     # =========================================================
     def _worker_loop(self):
 
@@ -77,10 +77,14 @@ class CameraProcessor:
         x = y = radius = 0
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        #lower_orange = np.array([5, 150, 150])
-        #upper_orange = np.array([25, 255, 255])
-        lower_orange = np.array([12, 220, 80])
-        upper_orange = np.array([22, 255, 180])
+
+        # range for pingpong ball
+        lower_orange = np.array([5, 150, 150])
+        upper_orange = np.array([25, 255, 255])
+
+        # range for red massive ball
+        #lower_orange = np.array([170, 120, 60])
+        #upper_orange = np.array([179, 255, 255])
         mask = cv2.inRange(hsv, lower_orange, upper_orange)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -109,7 +113,8 @@ class CameraProcessor:
         
         config = self.picam2.create_video_configuration(
             controls={
-                "FrameDurationLimits": (2000, 2000),
+                "FrameDurationLimits": (2000, 10000),
+                "AeEnable": True,
                 "ExposureTime": 1000
             }
         )
