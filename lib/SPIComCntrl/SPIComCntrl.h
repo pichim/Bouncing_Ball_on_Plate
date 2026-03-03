@@ -25,12 +25,12 @@ private:
     static constexpr float BALL_POS_MAX_PX = 1456.0f;
     static constexpr float BALL_POS_CENTER_PX = 728.0f;
     static constexpr float SERVO_CENTER = 0.5f;
-    static constexpr float SERVO_DELTA_LIMIT = 0.45f;
+    static constexpr float SERVO_DELTA_LIMIT = 0.1f;
     static constexpr float BALL_CTRL_KP = 0.5309f;
     static constexpr float BALL_CTRL_KI = 0.0f;
-    static constexpr float BALL_CTRL_KD = 0.4778f;
-    static constexpr float BALL_CTRL_TAU_D_S = 0.01f;
-    static constexpr float BALL_CTRL_TAU_R_O = 0.01f;
+    static constexpr float BALL_CTRL_KD = 10.0f;
+    static constexpr float BALL_CTRL_TAU_D_S = 0.1f;
+    static constexpr float BALL_CTRL_TAU_R_O = 0.1f;
 
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;
