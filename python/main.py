@@ -89,7 +89,7 @@ SPI_NUM_FLOATS = 30  # Number of float values in each message
 SPI_MSG_SIZE = 1 + SPI_NUM_FLOATS * 4 + 1  # header + floats + checksum
 
 # Main task period (like the C++ example)
-main_task_period_us = 19800
+main_task_period_us = 5000
 
 # ------------------ CHANGED: always double-transfer ------------------
 ARM_GAP_US = 100  # small gap so the slave can re-arm/build fresh TX
@@ -223,10 +223,13 @@ while True:
             fps_counter = 0
             fps_start_time = now
             print(f"BALL FPS: {current_fps:.2f}")
-            if x is not None and y is not None and r is not None:
-                print(x, y, r)
+            # if x is not None and y is not None and r is not None:
+            #     print(x, y, r)
 
-        x, y, r = pos
+        if pos is not None:
+            x, y, r = pos
+        else:
+            x, y, r = 0.0, 0.0, 0.0
         #print(x, y, r)
 
 
@@ -247,6 +250,8 @@ while True:
         # Load/update TX payload for this frame (no-op by default; customize later)
         #load_tx_frame(transmitted_data.data, transmitted_data.message_count)
         transmitted_data.data[0] = x
+        transmitted_data.data[1] = y
+        transmitted_data.data[2] = r
 
         # OPTIMIZED: pack all floats in one go
         struct.pack_into("<%df" % SPI_NUM_FLOATS, tx2, 1, *transmitted_data.data)
@@ -326,6 +331,7 @@ while True:
             )"""
         
         print(received_data.data[0])
+        print(received_data.data[1])
     main_task_elapsed_time_us = (time.perf_counter() - cycle_start_time) * 1_000_000.0
     remaining_us = main_task_period_us - main_task_elapsed_time_us
     if remaining_us < 0:

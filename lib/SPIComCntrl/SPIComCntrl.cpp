@@ -94,8 +94,9 @@ void SPIComCntrl::executeTask()
 
         // 3) Update Control output (PD) to get servo commands
         float control_output = m_ballPosCntrl.update(error);
-        m_servo_commands[0] = clamp(SERVO_CENTER + control_output  , 0.48f, 0.52f);
-        
+        m_servo_commands[0] = clamp(SERVO_CENTER + control_output  , 0.0f, 1.0f);
+        // m_servo_commands[0] = 0.5;
+
         // 4) Update servo commands from SPI payload (first three floats expected in [0,1])
         // m_servo_commands[0] = clamp01(m_spiData.data[0]);
         m_servo_commands[1] = clamp01(m_spiData.data[1]);

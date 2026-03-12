@@ -1,4 +1,5 @@
 import argparse
+import os
 import threading
 import time
 from http import server
@@ -26,8 +27,8 @@ CALIB_DIM = (1456, 1088)  # (width, height)
 # Fisheye-Kameramatrix
 K = np.array(
     [
-        [410.17747674, 0.0, 299.96826545],
-        [0.0, 409.32732313, 219.99535070],
+        [914.91763, 0.0, 663.41604981],
+        [0.0, 917.4751116, 526.47839392],
         [0.0, 0.0, 1.0],
     ],
     dtype=np.float64,
@@ -36,10 +37,10 @@ K = np.array(
 # Fisheye-Distortion-Koeffizienten: [k1, k2, k3, k4]
 D = np.array(
     [
-        [0.01534284],
-        [-0.01886187],
-        [0.01338572],
-        [0.02682248],
+        [0.01584966],
+        [0.01778682],
+        [-0.14639213],
+        [0.24211901],
     ],
     dtype=np.float64,
 )
@@ -127,6 +128,11 @@ def picam2_to_bgr(frame: np.ndarray) -> np.ndarray:
 
 def supports_opencv_window() -> bool:
     """Prueft, ob OpenCV-Fenster in der aktuellen Umgebung verfuegbar sind."""
+    # In Headless-Setups (z. B. SSH ohne X/Wayland) darf kein Fenster-Probing
+    # versucht werden, da manche OpenCV/Qt-Builds den Prozess hart abbrechen.
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return False
+
     try:
         cv2.namedWindow("_probe_", cv2.WINDOW_NORMAL)
         cv2.imshow("_probe_", np.zeros((8, 8, 3), dtype=np.uint8))
@@ -315,6 +321,9 @@ def live_undistort(
     window_mode = display
     if display == "auto":
         window_mode = "window" if supports_opencv_window() else "web"
+    elif display == "window" and not supports_opencv_window():
+        print("Hinweis: Kein Display-Server gefunden, wechsle auf Web-Stream.")
+        window_mode = "web"
 
     if window_mode == "window":
         print("Anzeige: OpenCV-Fenster | Tasten: q oder ESC = beenden")
@@ -401,8 +410,8 @@ def live_undistort(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Live-Fisheye-Entzerrung mit vorgegebener K-Matrix und D-Vektor")
     parser.add_argument("--camera", type=int, default=0, help="Kamera-Index (default: 0)")
-    parser.add_argument("--width", type=int, default=640, help="Frame-Breite (default: 640)")
-    parser.add_argument("--height", type=int, default=480, help="Frame-Hoehe (default: 480)")
+    parser.add_argument("--width", type=int, default=1456, help="Frame-Breite (default: 640)")
+    parser.add_argument("--height", type=int, default=1088, help="Frame-Hoehe (default: 480)")
     parser.add_argument(
         "--backend",
         choices=["picam2", "opencv"],

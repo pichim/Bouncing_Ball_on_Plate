@@ -34,34 +34,48 @@ class CameraProcessor:
         self.worker = threading.Thread(target=self._worker_loop, daemon=True)
 
         # camera distortion
+        # only used if K was made with other frame sizes   
+        # def scale_intrinsics(K, old_size, new_size):
+        #     old_w, old_h = old_size
+        #     new_w, new_h = new_size
+        #     sx = new_w / old_w
+        #     sy = new_h / old_h
+        #     K_scaled = K.copy()
+        #     K_scaled[0, 0] *= sx  # fx
+        #     K_scaled[1, 1] *= sy  # fy
+        #     K_scaled[0, 2] *= sx  # cx
+        #     K_scaled[1, 2] *= sy  # cy
+        #     return K_scaled
 
-        def scale_intrinsics(K, old_size, new_size):
-            old_w, old_h = old_size
-            new_w, new_h = new_size
-            sx = new_w / old_w
-            sy = new_h / old_h
-            K_scaled = K.copy()
-            K_scaled[0, 0] *= sx  # fx
-            K_scaled[1, 1] *= sy  # fy
-            K_scaled[0, 2] *= sx  # cx
-            K_scaled[1, 2] *= sy  # cy
-            return K_scaled
+        # # --- Fisheye calibration (your working values) ---
+        # K_old = np.array([
+        #     [410.17747674, 0.0, 299.96826545],
+        #     [0.0, 409.32732313, 219.99535070],
+        #     [0.0, 0.0, 1.0]
+        # ], dtype=np.float64)
 
-        # --- Fisheye calibration (your working values) ---
-        K_old = np.array([
-            [410.17747674, 0.0, 299.96826545],
-            [0.0, 409.32732313, 219.99535070],
-            [0.0, 0.0, 1.0]
+        # D = np.array([
+        #     [0.01534284],
+        #     [-0.01886187],
+        #     [0.01338572],
+        #     [0.02682248]
+        # ], dtype=np.float64)
+
+        # K = scale_intrinsics(K_old, (640, 480), (1456, 1088))
+
+        K = np.array([
+        [914.91763, 0.0, 663.41604981],
+        [0.0, 917.4751116, 526.47839392],
+        [0.0, 0.0, 1.0]
         ], dtype=np.float64)
 
         D = np.array([
-            [0.01534284],
-            [-0.01886187],
-            [0.01338572],
-            [0.02682248]
+            [0.01584966],
+            [0.01778682],
+            [-0.14639213],
+            [0.24211901]
         ], dtype=np.float64)
 
-        K = scale_intrinsics(K_old, (640, 480), (1456, 1088))
 
         BALANCE = 1.0  # 0.0=less FOV, 1.0=max FOV
         h = 1088
@@ -115,7 +129,7 @@ class CameraProcessor:
 
             # --- undistort frame ---
             frame_undist = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-
+            # frame_undist = frame
             
 
             x, y, r = self.detect_ball(frame_undist)
@@ -187,10 +201,10 @@ class CameraProcessor:
                 cv2.circle(frame, center, int(radius), (0, 255, 0), 2)
                 cv2.circle(frame, center, 2, (0, 0, 255), 3)
 
-            # Save frame for website (with drawings already on it)
-            if ENABLE_WEB_STREAM:
-                with self.web_lock:
-                    self.web_frame = frame
+        # Save frame for website (with drawings already on it)
+        if ENABLE_WEB_STREAM:
+            with self.web_lock:
+                self.web_frame = frame
         
         return x, y, radius
 
@@ -203,6 +217,7 @@ class CameraProcessor:
 
         
         config = self.picam2.create_video_configuration(
+            main={"size": (1456, 1088)},
             controls={
                 "FrameDurationLimits": (2000, 10000),
                 "AeEnable": True,
@@ -287,4 +302,3 @@ if ENABLE_WEB_STREAM:
             target=lambda: app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False),
             daemon=True
         ).start()
-
