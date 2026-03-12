@@ -205,6 +205,7 @@ current_fps = 0.0
 # Timing
 start_time = time.perf_counter()
 previous_time = start_time
+x, y, r = None, None, None
 
 while True:
     # Start timer (like main_task_timer.reset() in C++)
@@ -222,7 +223,8 @@ while True:
             fps_counter = 0
             fps_start_time = now
             print(f"BALL FPS: {current_fps:.2f}")
-            print(x, y, r)
+            if x is not None and y is not None and r is not None:
+                print(x, y, r)
 
         x, y, r = pos
         #print(x, y, r)
@@ -323,7 +325,7 @@ while True:
                 f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
             )"""
         
-    print(received_data.data[0])
+        print(received_data.data[0])
     main_task_elapsed_time_us = (time.perf_counter() - cycle_start_time) * 1_000_000.0
     remaining_us = main_task_period_us - main_task_elapsed_time_us
     if remaining_us < 0:

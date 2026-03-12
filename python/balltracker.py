@@ -33,6 +33,51 @@ class CameraProcessor:
         self.running = False
         self.worker = threading.Thread(target=self._worker_loop, daemon=True)
 
+        # camera distortion
+
+        def scale_intrinsics(K, old_size, new_size):
+            old_w, old_h = old_size
+            new_w, new_h = new_size
+            sx = new_w / old_w
+            sy = new_h / old_h
+            K_scaled = K.copy()
+            K_scaled[0, 0] *= sx  # fx
+            K_scaled[1, 1] *= sy  # fy
+            K_scaled[0, 2] *= sx  # cx
+            K_scaled[1, 2] *= sy  # cy
+            return K_scaled
+
+        # --- Fisheye calibration (your working values) ---
+        K_old = np.array([
+            [410.17747674, 0.0, 299.96826545],
+            [0.0, 409.32732313, 219.99535070],
+            [0.0, 0.0, 1.0]
+        ], dtype=np.float64)
+
+        D = np.array([
+            [0.01534284],
+            [-0.01886187],
+            [0.01338572],
+            [0.02682248]
+        ], dtype=np.float64)
+
+        K = scale_intrinsics(K_old, (640, 480), (1456, 1088))
+
+        BALANCE = 1.0  # 0.0=less FOV, 1.0=max FOV
+        h = 1088
+        w = 1456
+
+        # --- build undistort maps ---
+        new_K = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+            K, D, (w, h), np.eye(3), balance=BALANCE
+        )
+        global map1, map2
+        map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+            K, D, np.eye(3), new_K, (w, h), cv2.CV_16SC2
+        )
+
+
+
     # =========================================================
     # Camera callback
     # =========================================================
@@ -58,17 +103,63 @@ class CameraProcessor:
     # =========================================================
     def _worker_loop(self):
 
+
         while self.running:
             try:
                 frame = self.frame_q.get(timeout=0.1)
             except queue.Empty:
                 continue
 
-            x, y, r = self.detect_ball(frame)
+            
 
-            with self.lock:
-                self.ball_pos = (x, y, r)
-                self.new_data = True
+
+            # --- undistort frame ---
+            frame_undist = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+
+            
+
+            x, y, r = self.detect_ball(frame_undist)
+
+            if r > 5:  # valid detection
+
+                # coordinate system: (0,0) is center of image, +x right, +y down
+                x -= frame.shape[1] / 2
+                y -= frame.shape[0] / 2
+
+                # calculates scale factor with given ball radius = 20mm
+                s = 20 / r
+
+
+                #make s constant for now to make it less error prone
+                s = 0.23900
+                R = s * r
+                X = s * x
+                Y = s * y
+
+
+
+                # print(
+                #         f"""
+                #     --- Ball Measurement ---
+                #     Pixel values:
+                #     x_px = {x:.2f}
+                #     y_px = {y:.2f}
+                #     r_px = {r:.2f}
+
+                #     Scale:
+                #     s = {s:.4f} mm/px
+
+                #     Converted values:
+                #     R_mm = {R:.2f}
+                #     X_mm = {X:.2f}
+                #     Y_mm = {Y:.2f}
+                #     ------------------------
+                #     """
+                #     )
+
+                with self.lock:
+                    self.ball_pos = (X, Y, R)
+                    self.new_data = True
 
     # =========================================================
     # Ball detection
