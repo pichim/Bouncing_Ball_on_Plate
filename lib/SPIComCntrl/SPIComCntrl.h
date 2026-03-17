@@ -9,6 +9,8 @@
 #include "Servo.h"
 #include "config.h"
 #include "mbed.h"
+#include "Chirp.h"  // chirp signal generator
+
 
 using namespace std::chrono;
 
@@ -19,8 +21,14 @@ public:
     virtual ~SPIComCntrl();
 
 private:
-    static constexpr float SERVO_PULSE_MIN = 0.0325f;
-    static constexpr float SERVO_PULSE_MAX = 0.1175f;
+    //MKS
+    static constexpr float SERVO_PULSE_MIN = 0.214f;
+    static constexpr float SERVO_PULSE_MAX = 0.536f;
+    // static constexpr float SERVO_PULSE_MIN = 0.0325f;
+    // static constexpr float SERVO_PULSE_MAX = 0.1175f;
+    //powerhd
+    // static constexpr float SERVO_PULSE_MIN = 0.30175f;
+    // static constexpr float SERVO_PULSE_MAX = 0.695f;   
     static constexpr float BALL_POS_MIN_PX = 0.0f;
     static constexpr float BALL_POS_MAX_PX = 1456.0f;
     static constexpr float BALL_POS_CENTER_PX = 728.0f;
@@ -31,6 +39,11 @@ private:
     static constexpr float BALL_CTRL_KD = 10.0f;
     static constexpr float BALL_CTRL_TAU_D_S = 0.1f;
     static constexpr float BALL_CTRL_TAU_R_O = 0.1f;
+
+    // chirp parameters (start/end freq, duration) – sample period Ts set at runtime
+    static constexpr float CHIRP_F0_HZ = 1.0f;
+    static constexpr float CHIRP_F1_HZ = 10.0f;
+    static constexpr float CHIRP_T1_S   = 100.0f;
 
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;
@@ -48,6 +61,11 @@ private:
 
     float m_Ts;
     PIDCntrl m_ballPosCntrl;
+
+    // chirp generator and control flag
+    Chirp m_chirp;
+    bool  m_start_chirp{false};
+    float chirp_exc{0.0f}; // initial raw chirp excitation [-1,1]
 
     float m_servo_commands[3]{};
 

@@ -46,6 +46,9 @@ SPIComCntrl::SPIComCntrl()
 
     m_Timer.start();
 
+    // initialize chirp generator with predefined constants and sample time
+    m_chirp.init(CHIRP_F0_HZ, CHIRP_F1_HZ, CHIRP_T1_S, m_Ts);
+
     // NOTE: RealTimeThread::enable() must be called by the user after construction is complete
 }
 
@@ -68,8 +71,11 @@ void SPIComCntrl::executeTask()
     if (!m_Imu.isCalibrated())
         return;
 
+
+    bool run_1ms = dtime_us >= 1000.0f;
+
     // Check for new SPI data from master
-    if (m_SpiSlaveDMA.hasNewData()) {
+    if (m_SpiSlaveDMA.hasNewData() || run_1ms) {
         m_spiData = m_SpiSlaveDMA.getSPIData();
 
         // // When logging via SerialStream you have to uncomment this print
@@ -97,6 +103,23 @@ void SPIComCntrl::executeTask()
         m_servo_commands[0] = clamp(SERVO_CENTER + control_output  , 0.0f, 1.0f);
         // m_servo_commands[0] = 0.5;
 
+        // -- chirp update ------------------------------------------------
+        if (!m_start_chirp) {
+            m_start_chirp = true; // start the generator once
+        }
+        float chirp_exc = 0.0f; // raw chirp output [-1,1]
+        if (m_start_chirp && m_chirp.update()) {
+            chirp_exc = m_chirp.getExc();
+        }
+        // map raw excitation to servo command range [0,1]
+        float servo_chirp = clamp01(0.5f * (chirp_exc + 1.0f));
+        // ----------------------------------------------------------------
+
+        //comment out if dont want to use chirp signal and just want to control with ball position
+        m_servo_commands[0] = servo_chirp;
+        // printf("Frequency: %.2f Hz | Excitation: %.3f | Servo Command: %.3f\n",
+        //        m_chirp.getFreq(), chirp_exc, m_servo_commands[0]);
+
         // 4) Update servo commands from SPI payload (first three floats expected in [0,1])
         // m_servo_commands[0] = clamp01(m_spiData.data[0]);
         m_servo_commands[1] = clamp01(m_spiData.data[1]);
@@ -107,22 +130,22 @@ void SPIComCntrl::executeTask()
     }
 
     // Prepare next reply
-    m_reply_data[0] = m_servo_commands[0]; // Echo servo D0 command
-    m_reply_data[1] = m_servo_commands[1]; // Echo servo D1 command
-    m_reply_data[2] = m_servo_commands[2]; // Echo servo D2 command
-    m_reply_data[3] = m_ImuData.gyro.x();  // Gyro X in rad/sec
-    m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
-    m_reply_data[5] = m_ImuData.gyro.z();  // Gyro Z in rad/sec
-    m_reply_data[6] = m_ImuData.acc.x();   // Acc X in m/sec^2
-    m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
-    m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
-    m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
+    // m_reply_data[0] = m_servo_commands[0]; // Echo servo D0 command
+    // m_reply_data[1] = m_servo_commands[1]; // Echo servo D1 command
+    // m_reply_data[2] = m_servo_commands[2]; // Echo servo D2 command
+    // m_reply_data[3] = m_ImuData.gyro.x();  // Gyro X in rad/sec
+    // m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
+    // m_reply_data[5] = m_ImuData.gyro.z();  // Gyro Z in rad/sec
+    // m_reply_data[6] = m_ImuData.acc.x();   // Acc X in m/sec^2
+    // m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
+    // m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
+    // m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
 
     // Send data over serial stream
     if (m_SerialStream.startByteReceived()) {
         m_SerialStream.write(dtime_us);            //  0 Delta time in us
         m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
-        m_SerialStream.write(m_servo_commands[1]); //  2 Echo servo D1 command
+        m_SerialStream.write(chirp_exc);           //  2 original chirp excitation (0..1)
         m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
         m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
         m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
