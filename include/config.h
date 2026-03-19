@@ -23,14 +23,16 @@
 #define BBOP_IMU_KP (0.1592f * 2.0f * M_PIf)
 #define BBOP_IMU_KI 0.0f
 
-// PES Board Servo Connections
+// PES Board Servo Connections and configuration
 #define BBOP_SERVO_D0_PIN PB_2
 #define BBOP_SERVO_D1_PIN PC_8
 #define BBOP_SERVO_D2_PIN PC_6
 #define BBOP_SERVO_PWM_PERIOD_US 2000
+#define BBOP_SERVO_angle_range_rad 2.1f
+#define BBOP_SERVO_angle_range_grad 122.7f
 
 // SPI Communication and Control Thread
-#define BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US 1000
+#define BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US 2000
 #define BBOP_SPI_COM_CNTRL_THREAD_PRIORITY osPriorityNormal
 #define BBOP_SPI_COM_CNTRL_THREAD_STACK_SIZE OS_STACK_SIZE
 

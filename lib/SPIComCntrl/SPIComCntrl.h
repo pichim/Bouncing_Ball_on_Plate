@@ -41,8 +41,8 @@ private:
     static constexpr float BALL_CTRL_TAU_R_O = 0.1f;
 
     // chirp parameters (start/end freq, duration) – sample period Ts set at runtime
-    static constexpr float CHIRP_F0_HZ = 1.0f;
-    static constexpr float CHIRP_F1_HZ = 10.0f;
+    static constexpr float CHIRP_F0_HZ = 0.1f;
+    static constexpr float CHIRP_F1_HZ = 245.0f;
     static constexpr float CHIRP_T1_S   = 100.0f;
 
     SpiData m_spiData;
@@ -69,12 +69,18 @@ private:
 
     float m_servo_commands[3]{};
 
+    float current_angle_deg{0.0f};
+
     float m_reply_data[SPI_NUM_FLOATS];
 
     bool m_spi_ready{false};
 
     void executeTask() override;
     static float clamp(float val, float min, float max);
+    static float DegreeToPWM(float degree);
+    static float PWMToDegree(float pulse_width);
+    static float DegreeToRad(float degree);
+    void toggle_servo();
     static float clamp01(float val) { return clamp(val, 0.0f, 1.0f); }
 };
 #endif /* SPI_COM_CNTRL_H_ */

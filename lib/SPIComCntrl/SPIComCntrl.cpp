@@ -1,4 +1,5 @@
 #include "SPIComCntrl.h"
+#include "DebounceIn.h"
 
 SPIComCntrl::SPIComCntrl()
     : RealTimeThread(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US,
@@ -31,17 +32,9 @@ SPIComCntrl::SPIComCntrl()
 
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-    m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-    m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
 
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(0.5f);
-    }
-    if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable();
-    }
-    if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable();
+        m_servoD0.enable(0.0f);
     }
 
     m_Timer.start();
@@ -50,16 +43,23 @@ SPIComCntrl::SPIComCntrl()
     m_chirp.init(CHIRP_F0_HZ, CHIRP_F1_HZ, CHIRP_T1_S, m_Ts);
 
     // NOTE: RealTimeThread::enable() must be called by the user after construction is complete
+
+
 }
 
 SPIComCntrl::~SPIComCntrl() = default;
 
+ 
 void SPIComCntrl::executeTask()
 {
+
+
     // Return early if SPI not ready
     if (!m_spi_ready) {
         return;
     }
+
+
 
     // Measure delta time
     const microseconds time_us = m_Timer.elapsed_time();
@@ -68,14 +68,72 @@ void SPIComCntrl::executeTask()
 
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
-    if (!m_Imu.isCalibrated())
+    if (!m_Imu.isCalibrated()) {
         return;
+    }
 
 
-    bool run_1ms = dtime_us >= 1000.0f;
+
+    if (m_Imu.isCalibrated()) {
+        // -- chirp update ------------------------------------------------
+        if (!m_start_chirp) {
+            m_start_chirp = true; // start the generator once
+        }
+        float chirp_exc = 0.0f; // raw chirp output [0,1]
+        if (m_start_chirp && m_chirp.update()) {
+            chirp_exc = m_chirp.getExc();
+        }
+        // map raw excitation to servo command range [0,1]
+        float servo_chirp = clamp01(0.5f * (chirp_exc + 1.0f));
+        // ----------------------------------------------------------------
+
+        // comment out if dont want to use chirp signal and just want to control with ball position
+        m_servo_commands[0] = servo_chirp;
+        m_servoD0.setPulseWidth(m_servo_commands[0]);
+        
+        // printf("Frequency: %.2f Hz | Excitation: %.3f | Servo Command: %.3f\n",
+        //        m_chirp.getFreq(), chirp_exc, m_servo_commands[0]);
+    }
+
+    // if (m_Imu.isCalibrated()) {
+        
+    //     // 'static' bedeutet, diese Variablen merken sich ihren Wert 
+    //     // auch beim nächsten Durchlauf der Funktion!
+    //     static int tick_counter = 0;
+        
+
+    //     // Zähler bei jedem Durchlauf (jede Millisekunde) erhöhen
+    //     tick_counter++;
+
+    
+    // if (tick_counter >= 2000) {
+        
+    //     tick_counter = 0; 
+
+    //     static const float servo_positions_deg[] = {0.0f, 30.0f, 60.0f, 110.0f};
+    //     static const int num_positions = 4;
+    //     static float test_servo_val = 0.0f;
+        
+    //     static int state_index = 0; // Merkt sich, wo wir im Array gerade sind
+
+    //     // Den aktuellen Winkel in Grad aus dem Array holen
+    //     current_angle_deg = servo_positions_deg[state_index];
+
+    //     // Umrechnen für den Servo (0.0f bis 1.0f)
+    //     test_servo_val = DegreeToPWM(current_angle_deg);
+    //     // Wert auf den Servo schreiben
+    //     m_servo_commands[0] = test_servo_val;
+    //     m_servoD0.setPulseWidth(m_servo_commands[0]);
+
+    //     // Den Index für das nächste Mal (in 2 Sekunden) eins weiterschieben
+    //     state_index = (state_index + 1) % num_positions;
+    // }
+
+
+    // }
 
     // Check for new SPI data from master
-    if (m_SpiSlaveDMA.hasNewData() || run_1ms) {
+    if (m_SpiSlaveDMA.hasNewData()) {
         m_spiData = m_SpiSlaveDMA.getSPIData();
 
         // // When logging via SerialStream you have to uncomment this print
@@ -96,57 +154,42 @@ void SPIComCntrl::executeTask()
         // printf("Ball Pos: %.2f px\n", m_spiData.data[0]);
 
         // 2) Calculate error between ball position and center
-        float error = BALL_POS_CENTER_PX - m_spiData.data[0];
+        // float error = BALL_POS_CENTER_PX - m_spiData.data[0];
 
         // 3) Update Control output (PD) to get servo commands
-        float control_output = m_ballPosCntrl.update(error);
-        m_servo_commands[0] = clamp(SERVO_CENTER + control_output  , 0.0f, 1.0f);
-        // m_servo_commands[0] = 0.5;
+        // float control_output = m_ballPosCntrl.update(error);
+        // m_servo_commands[0] = clamp(SERVO_CENTER + control_output  , 0.0f, 1.0f);
 
-        // -- chirp update ------------------------------------------------
-        if (!m_start_chirp) {
-            m_start_chirp = true; // start the generator once
-        }
-        float chirp_exc = 0.0f; // raw chirp output [-1,1]
-        if (m_start_chirp && m_chirp.update()) {
-            chirp_exc = m_chirp.getExc();
-        }
-        // map raw excitation to servo command range [0,1]
-        float servo_chirp = clamp01(0.5f * (chirp_exc + 1.0f));
-        // ----------------------------------------------------------------
 
-        //comment out if dont want to use chirp signal and just want to control with ball position
-        m_servo_commands[0] = servo_chirp;
-        // printf("Frequency: %.2f Hz | Excitation: %.3f | Servo Command: %.3f\n",
-        //        m_chirp.getFreq(), chirp_exc, m_servo_commands[0]);
+
 
         // 4) Update servo commands from SPI payload (first three floats expected in [0,1])
         // m_servo_commands[0] = clamp01(m_spiData.data[0]);
-        m_servo_commands[1] = clamp01(m_spiData.data[1]);
-        m_servo_commands[2] = clamp01(m_spiData.data[2]);
-        m_servoD0.setPulseWidth(m_servo_commands[0]);
-        m_servoD1.setPulseWidth(m_servo_commands[1]);
-        m_servoD2.setPulseWidth(m_servo_commands[2]);
+        // m_servo_commands[1] = clamp01(m_spiData.data[1]);
+        // m_servo_commands[2] = clamp01(m_spiData.data[2]);
+        // m_servoD0.setPulseWidth(m_servo_commands[0]);
+        // m_servoD1.setPulseWidth(m_servo_commands[1]);
+        // m_servoD2.setPulseWidth(m_servo_commands[2]);
     }
 
     // Prepare next reply
-    // m_reply_data[0] = m_servo_commands[0]; // Echo servo D0 command
-    // m_reply_data[1] = m_servo_commands[1]; // Echo servo D1 command
-    // m_reply_data[2] = m_servo_commands[2]; // Echo servo D2 command
-    // m_reply_data[3] = m_ImuData.gyro.x();  // Gyro X in rad/sec
-    // m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
-    // m_reply_data[5] = m_ImuData.gyro.z();  // Gyro Z in rad/sec
-    // m_reply_data[6] = m_ImuData.acc.x();   // Acc X in m/sec^2
-    // m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
-    // m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
-    // m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
+    m_reply_data[0] = m_servo_commands[0]; // Echo servo D0 command
+    m_reply_data[1] = m_servo_commands[1]; // Echo servo D1 command
+    m_reply_data[2] = m_servo_commands[2]; // Echo servo D2 command
+    m_reply_data[3] = m_ImuData.gyro.x();  // Gyro X in rad/sec
+    m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
+    m_reply_data[5] = m_ImuData.gyro.z();  // Gyro Z in rad/sec
+    m_reply_data[6] = m_ImuData.acc.x();   // Acc X in m/sec^2
+    m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
+    m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
+    m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
 
     // Send data over serial stream
     if (m_SerialStream.startByteReceived()) {
         m_SerialStream.write(dtime_us);            //  0 Delta time in us
         m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
         m_SerialStream.write(chirp_exc);           //  2 original chirp excitation (0..1)
-        m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
+        m_SerialStream.write(DegreeToRad(PWMToDegree(m_servo_commands[0]))); //  3 Echo servo D2 command
         m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
         m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
         m_SerialStream.write(m_ImuData.gyro.z());  //  6 Gyro Z in rad/sec
@@ -167,4 +210,25 @@ float SPIComCntrl::clamp(float val, float min, float max)
     if (val > max)
         return max;
     return val;
+}
+
+
+float SPIComCntrl::DegreeToPWM(float degree)
+{
+    // Map degree (0 to 110) to pwm
+    float pulse_width = (degree / BBOP_SERVO_angle_range_grad);
+    return pulse_width;
+}
+
+float SPIComCntrl::PWMToDegree(float pulse_width)
+{
+    // Map pwm (0 to 1) to degree (0 to 110)
+    float degree = pulse_width * BBOP_SERVO_angle_range_grad;
+    return degree;
+}
+
+float SPIComCntrl::DegreeToRad(float degree)
+{
+    float rad = degree * (M_PIf / 180.0f);
+    return rad;
 }
