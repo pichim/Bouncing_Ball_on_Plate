@@ -52,6 +52,9 @@ IMU::ImuData IMU::getImuData()
             m_gyro_offset /= m_avg_cntr;
             m_acc_offset /= m_avg_cntr;
 
+            // we have to keep gravity in acc z direction
+            m_acc_offset(2) = 0.0f;
+
             printf("IMU calibrated.\n");
             printf("Avg. Gyr offset: %.4f, %.4f, %.4f; ...\n", m_gyro_offset(0), m_gyro_offset(1), m_gyro_offset(2));
             printf("Avg. Acc offset: %.4f, %.4f, %.4f; ...\n", m_acc_offset(0), m_acc_offset(1), m_acc_offset(2));

@@ -27,7 +27,7 @@ SPIComCntrl::SPIComCntrl()
     printf("SPI Communication started. Waiting for master...\n");
 
     //create PD-T1 controller
-    m_ballPosCntrl = PIDCntrl(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, -SERVO_DELTA_LIMIT, SERVO_DELTA_LIMIT);
+    m_ballPosCntrl = PIDCntrl(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
 
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
@@ -35,7 +35,7 @@ SPIComCntrl::SPIComCntrl()
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
 
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(0.5f);
+        m_servoD0.enable(SERVO_CENTER);
     }
     if (!m_servoD1.isEnabled()) {
         m_servoD1.enable();
@@ -68,9 +68,21 @@ void SPIComCntrl::executeTask()
     if (!m_Imu.isCalibrated())
         return;
 
-    // Check for new SPI data from master
-    if (m_SpiSlaveDMA.hasNewData()) {
+
+
+    // Handle SPI communication: check for new data, update control, prepare reply  
+    static int missing_data_counter = 0;
+    bool newDataAvailable = m_SpiSlaveDMA.hasNewData();
+
+    if (newDataAvailable) {
         m_spiData = m_SpiSlaveDMA.getSPIData();
+        
+        // Wenn der Ball länger weg war, Regler-Historie löschen, um Schock zu vermeiden
+        if ((missing_data_counter * m_Ts) > VISION_TIMEOUT) { 
+            m_ballPosCntrl.reset(0.0f); 
+        }
+        missing_data_counter = 0; // Ball ist wieder da, Counter resetten
+
 
         // // When logging via SerialStream you have to uncomment this print
         // printf("Message: %lu | Delta Time: %lu us | "
@@ -85,30 +97,35 @@ void SPIComCntrl::executeTask()
         //        SPI_HEADER_SLAVE,
         //        m_spiData.failed_count,
         //        m_spiData.readout_time_us);
+
+    } else {
+        missing_data_counter++; // Kein Ball in diesem Frame
+    }
+
+
+    if (m_Imu.isCalibrated()) {
         
-        // 1) Print Ball position (first float in SPI payload)
-        // printf("Ball Pos: %.2f px\n", m_spiData.data[0]);
+        if ((missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
+            
+            // 2) Calculate error between ball position and center
+            float error = m_spiData.data[0]; //input in mm
 
-        // 2) Calculate error between ball position and center
-        float error = BALL_POS_CENTER_PX - m_spiData.data[0];
+            // 3) Update Control output (PD) to get servo commands
+            float control_output_grad = m_ballPosCntrl.update(0.0 - error);
+            float control_output = DegreeToPWM(control_output_grad);
 
-        // 3) Update Control output (PD) to get servo commands
-        float control_output = m_ballPosCntrl.update(error);
-        m_servo_commands[0] = clamp(SERVO_CENTER + control_output  , 0.0f, 1.0f);
-        // m_servo_commands[0] = 0.5;
+            m_servo_commands[0] = clamp(SERVO_CENTER + control_output, 0.0f, 1.0f);
 
-        // 4) Update servo commands from SPI payload (first three floats expected in [0,1])
-        // m_servo_commands[0] = clamp01(m_spiData.data[0]);
-        m_servo_commands[1] = clamp01(m_spiData.data[1]);
-        m_servo_commands[2] = clamp01(m_spiData.data[2]);
+        } else {
+            m_servo_commands[0] = SERVO_CENTER;
+        }
+
         m_servoD0.setPulseWidth(m_servo_commands[0]);
-        m_servoD1.setPulseWidth(m_servo_commands[1]);
-        m_servoD2.setPulseWidth(m_servo_commands[2]);
     }
 
     // Prepare next reply
     m_reply_data[0] = m_servo_commands[0]; // Echo servo D0 command
-    m_reply_data[1] = m_servo_commands[1]; // Echo servo D1 command
+    m_reply_data[1] =m_spiData.data[0]; // error distance
     m_reply_data[2] = m_servo_commands[2]; // Echo servo D2 command
     m_reply_data[3] = m_ImuData.gyro.x();  // Gyro X in rad/sec
     m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
@@ -117,6 +134,8 @@ void SPIComCntrl::executeTask()
     m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
     m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
     m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
+
+
 
     // Send data over serial stream
     if (m_SerialStream.startByteReceived()) {
@@ -144,4 +163,22 @@ float SPIComCntrl::clamp(float val, float min, float max)
     if (val > max)
         return max;
     return val;
+}
+
+float SPIComCntrl::DegreeToPWM(float degree)
+{
+    float pulse_width = (degree / BBOP_SERVO_angle_range_grad);
+    return pulse_width;
+}
+
+float SPIComCntrl::PWMToDegree(float pulse_width)
+{
+    float degree = pulse_width * BBOP_SERVO_angle_range_grad;
+    return degree;
+}
+
+float SPIComCntrl::DegreeToRad(float degree)
+{
+    float rad = degree * (M_PIf / 180.0f);
+    return rad;
 }
