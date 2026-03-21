@@ -28,7 +28,7 @@
 #define BBOP_SERVO_D1_PIN PC_8
 #define BBOP_SERVO_D2_PIN PC_6
 #define BBOP_SERVO_PWM_PERIOD_US 2000
-#define BBOP_SERVO_angle_range_rad 2.1f
+#define BBOP_SERVO_angle_range_rad 2.141519f
 #define BBOP_SERVO_angle_range_grad 122.7f
 
 // SPI Communication and Control Thread

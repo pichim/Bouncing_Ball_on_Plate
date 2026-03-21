@@ -54,6 +54,10 @@ bool MPU6500_I2C::configuration(void)
     // set gyro and acc lpf to highest common setting
     // gyro: BW 184 Hz (delay 2.9 ms) at Fs 1 kHz
     // acc : BW 184 Hz (delay 5.8 ms) at Fs 1 kHz
+    // writeRegister(CONFIG, DLPF_CFG_184HZ_188HZ_NA);
+    // ThisThread::sleep_for(chrono::milliseconds(20));
+    // writeRegister(ACCEL_CONFIG_2, DLPF_CFG_184HZ_188HZ_NA);
+    // ThisThread::sleep_for(chrono::milliseconds(20));
     writeRegister(CONFIG, DLPF_CFG_184HZ_188HZ_NA);
     ThisThread::sleep_for(chrono::milliseconds(20));
     writeRegister(ACCEL_CONFIG_2, DLPF_CFG_184HZ_188HZ_NA);

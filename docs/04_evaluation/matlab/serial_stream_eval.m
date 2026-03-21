@@ -149,7 +149,7 @@ title('System-Ein- und Ausgang für Frequenzanalyse')
 legend('Input u (Servo Chirp)', 'Output y (Roll)', 'Location', 'best')
 
 Tend = t(end);
-Nest = round(5 / Ts);
+Nest = round(15 / Ts);
 win = hann(Nest);
 noverlap = round(0.5 * Nest);
 
@@ -160,7 +160,7 @@ Gest = frd(gest, freq, Ts, 'Units', 'Hz');
 
 Cest = frd(cest, freq, Ts, 'Units', 'Hz');
 
-%% Figure 6: Bode Diagramm Servo
+% Figure 6: Bode Diagramm Servo
 figure(6)
 bode(Gest)
 grid on
@@ -169,7 +169,7 @@ xlim([1, 1000])
 % sgtitle (Super-Title) setzt den Titel mittig über beide Subplots!
 title('Bode Diagramm Servo', 'FontWeight', 'bold')
 
-%% Figure 7: Kohärenz
+%% Figure 7: Kohärenz in db
 figure(7)
 bodemag(Cest)
 grid on
@@ -178,29 +178,66 @@ xlim([1, 1000])
 % Hier reicht ein normales title, da es nur ein Graph ist
 title('Kohärenz Bode Diagramm Servo')
 
-% % --- Frequenzgang-Schätzung ---
-% N = length(u);
-% window = hann(floor(N/4));
-% noverlap = floor(length(window)/2);
-% nfft = length(window);
-% 
-% [H,f] = tfestimate(u, y, window, noverlap, nfft, fs);
-% 
-% 
-% idx = (f >= fmin) & (f <= fmax);
-% 
-% % --- Bode Plot ---
-% figure(6)
-% subplot(2,1,1)
-% semilogx(f(idx),20*log10(abs(H(idx))),'LineWidth',1.5)
-% grid on
-% ylabel('Magnitude (dB)')
-% title('Servo Frequency Response')
-% 
-% subplot(2,1,2)
-% semilogx(f(idx),angle(H(idx))*180/pi,'LineWidth',1.5)
-% grid on
-% ylabel('Phase (deg)')
-% xlabel('Frequency (Hz)')
+%% Figure 7: Kohärenz (Absolut 0 bis 1)
+figure(7)
+clf;
 
+% Daten extrahieren: squeeze entfernt unnötige Dimensionen, abs zur Sicherheit
+freq_hz = Cest.Frequency;
+coh_absolute = abs(squeeze(Cest.ResponseData));
 
+% Plotten auf einer logarithmischen X-Achse
+semilogx(freq_hz, coh_absolute, 'r', 'LineWidth', 2.0)
+grid on
+
+% Achsen beschriften und limitieren
+xlabel('Frequenz (Hz)')
+ylabel('Kohärenz (Faktor 0 bis 1)')
+title('Kohärenz Servo (Absolut)', 'FontWeight', 'bold')
+
+ylim([0, 1.1]) % 1.1 damit die Linie bei 1.0 nicht am Rand klebt
+xlim([1, 1000])
+
+% Hilfslinie bei 0.6 einfügen (Qualitätsschwelle)
+hold on
+line([1 1000], [0.6 0.6], 'Color', [0.5 0.5 0.5], 'LineStyle', '--', 'LineWidth', 1.2)
+legend('Messdaten', 'Grenzbereich (0.6)')
+
+%%
+save_all_plots('chirp_184hz_lpf_125Hz');
+
+%%
+function save_all_plots(prefix)
+    % Falls kein Präfix angegeben wurde
+    if nargin < 1, prefix = 'Plot'; end
+    
+    % Erstelle einen Ordner 'Results', falls er nicht existiert
+    if ~exist('Results', 'dir')
+        mkdir('Results');
+    end
+    
+    % Finde alle offenen Figure-Handles
+    figHandles = findobj('Type', 'figure');
+    
+    for i = 1:length(figHandles)
+        fig = figHandles(i);
+        figNum = fig.Number;
+        
+        % --- NEU: Liniendicke für alle Linien in dieser Figure anpassen ---
+        % Findet alle Linien (Plots, Hilfslinien, etc.)
+        allLines = findobj(fig, 'Type', 'line');
+        set(allLines, 'LineWidth', 2.0); % Hier Wert anpassen (Standard ist 0.5)
+        
+        % Optional: Auch die Schriftgröße der Achsen für bessere Lesbarkeit erhöhen
+        allAxes = findobj(fig, 'Type', 'axes');
+        set(allAxes, 'FontSize', 12, 'FontWeight', 'bold');
+        
+        % Dateiname generieren
+        filename = sprintf('Results/%s_Fig%d.png', prefix, figNum);
+        
+        % Speichern mit hoher Qualität
+        exportgraphics(fig, filename, 'Resolution', 300);
+        
+        fprintf('Gespeichert: %s (Liniendicke angepasst)\n', filename);
+    end
+end

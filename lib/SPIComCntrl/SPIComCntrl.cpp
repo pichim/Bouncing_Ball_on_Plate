@@ -79,12 +79,13 @@ void SPIComCntrl::executeTask()
         if (!m_start_chirp) {
             m_start_chirp = true; // start the generator once
         }
-        float chirp_exc = 0.0f; // raw chirp output [0,1]
+        float chirp_exc = 0.0f;
         if (m_start_chirp && m_chirp.update()) {
             chirp_exc = m_chirp.getExc();
         }
         // map raw excitation to servo command range [0,1]
-        float servo_chirp = clamp01(0.5f * (chirp_exc + 1.0f));
+        float amplitude = 0.2f; // adjust amplitude of chirp effect on servo command
+        float servo_chirp = clamp01(0.5f + (chirp_exc * amplitude)); // center at 0.5 and scale by amplitude, then clamp to [0,1]
         // ----------------------------------------------------------------
 
         // comment out if dont want to use chirp signal and just want to control with ball position
