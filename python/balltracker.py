@@ -1,6 +1,7 @@
 import threading
 import queue
 import numpy as np
+import time
 from picamera2 import Picamera2
 import cv2
 ENABLE_WEB_STREAM = True  # <<< SET TO False TO DISABLE WEBSITE
@@ -33,6 +34,64 @@ class CameraProcessor:
         self.running = False
         self.worker = threading.Thread(target=self._worker_loop, daemon=True)
 
+        # camera distortion
+        # only used if K was made with other frame sizes   
+        # def scale_intrinsics(K, old_size, new_size):
+        #     old_w, old_h = old_size
+        #     new_w, new_h = new_size
+        #     sx = new_w / old_w
+        #     sy = new_h / old_h
+        #     K_scaled = K.copy()
+        #     K_scaled[0, 0] *= sx  # fx
+        #     K_scaled[1, 1] *= sy  # fy
+        #     K_scaled[0, 2] *= sx  # cx
+        #     K_scaled[1, 2] *= sy  # cy
+        #     return K_scaled
+
+        # # --- Fisheye calibration (your working values) ---
+        # K_old = np.array([
+        #     [410.17747674, 0.0, 299.96826545],
+        #     [0.0, 409.32732313, 219.99535070],
+        #     [0.0, 0.0, 1.0]
+        # ], dtype=np.float64)
+
+        # D = np.array([
+        #     [0.01534284],
+        #     [-0.01886187],
+        #     [0.01338572],
+        #     [0.02682248]
+        # ], dtype=np.float64)
+
+        # K = scale_intrinsics(K_old, (640, 480), (1456, 1088))
+
+        self.K = np.array([
+        [914.91763, 0.0, 663.41604981],
+        [0.0, 917.4751116, 526.47839392],
+        [0.0, 0.0, 1.0]
+        ], dtype=np.float64)
+
+        self.D = np.array([
+            [0.01584966],
+            [0.01778682],
+            [-0.14639213],
+            [0.24211901]
+        ], dtype=np.float64)
+
+
+        BALANCE = 1.0  # 0.0=less FOV, 1.0=max FOV
+        h = 1088
+        w = 1456
+
+        # --- build undistort maps ---
+        self.new_K = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+            self.K, self.D, (w, h), np.eye(3), balance=BALANCE
+        )
+        self.map1, self.map2 = cv2.fisheye.initUndistortRectifyMap(
+            self.K, self.D, np.eye(3), self.new_K, (w, h), cv2.CV_16SC2
+        )
+
+
+
     # =========================================================
     # Camera callback
     # =========================================================
@@ -58,17 +117,80 @@ class CameraProcessor:
     # =========================================================
     def _worker_loop(self):
 
+
         while self.running:
             try:
                 frame = self.frame_q.get(timeout=0.1)
             except queue.Empty:
                 continue
 
-            x, y, r = self.detect_ball(frame)
+            
 
-            with self.lock:
-                self.ball_pos = (x, y, r)
-                self.new_data = True
+
+            # # --- undistort frame ---
+            # frame_undist = cv2.remap(frame, self.map1, self.map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            # # frame_undist = frame
+            
+
+            x_distorted, y_distorted, r = self.detect_ball(frame)
+
+            if r > 5:  # valid detection
+
+                # 2. Punkt für OpenCV vorbereiten (braucht ein spezielles Numpy-Format: 1x1x2 Array)
+                pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
+
+                # 3. NUR diesen einen Punkt entzerren
+                # WICHTIG: Das P=new_K sorgt dafür, dass die Koordinaten wieder in normale 
+                # Pixel-Werte (wie bei deinem alten Bild) umgerechnet werden.
+                undistorted_pt = cv2.fisheye.undistortPoints(
+                    pt, 
+                    self.K, 
+                    self.D, 
+                    P=self.new_K
+                )
+
+                # 4. Die neuen, entzerrten Koordinaten auslesen
+                x = undistorted_pt[0][0][0]
+                y = undistorted_pt[0][0][1]
+
+                # coordinate system: (0,0) is center of image, +x right, +y down
+                x -= frame.shape[1] / 2
+                y -= frame.shape[0] / 2
+
+                # calculates scale factor with given ball radius = 20mm
+                s = 20 / r
+
+
+                #make s constant for now to make it less error prone
+                s = 0.1890
+                R = s * r
+                X = s * x
+                Y = s * y
+
+
+
+                # print(
+                #         f"""
+                #     --- Ball Measurement ---
+                #     Pixel values:
+                #     x_px = {x:.2f}
+                #     y_px = {y:.2f}
+                #     r_px = {r:.2f}
+
+                #     Scale:
+                #     s = {s:.4f} mm/px
+
+                #     Converted values:
+                #     R_mm = {R:.2f}
+                #     X_mm = {X:.2f}
+                #     Y_mm = {Y:.2f}
+                #     ------------------------
+                #     """
+                #     )
+
+                with self.lock:
+                    self.ball_pos = (X, Y, R)
+                    self.new_data = True
 
     # =========================================================
     # Ball detection
@@ -95,11 +217,18 @@ class CameraProcessor:
                 center = (int(x), int(y))
                 cv2.circle(frame, center, int(radius), (0, 255, 0), 2)
                 cv2.circle(frame, center, 2, (0, 0, 255), 3)
+        
+        # Höhe und Breite des Frames abfragen, Zentrum berechnen
+        h, w = frame.shape[:2]
+        cx, cy = w // 2, h // 2
 
-            # Save frame for website (with drawings already on it)
-            if ENABLE_WEB_STREAM:
-                with self.web_lock:
-                    self.web_frame = frame
+        # Rotes Kreuz (+) im Bildzentrum einzeichnen
+        cv2.drawMarker(frame, (cx, cy), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+
+        # Save frame for website (with drawings already on it)
+        if ENABLE_WEB_STREAM:
+            with self.web_lock:
+                self.web_frame = frame
         
         return x, y, radius
 
@@ -112,6 +241,7 @@ class CameraProcessor:
 
         
         config = self.picam2.create_video_configuration(
+            main={"size": (1456, 1088)},
             controls={
                 "FrameDurationLimits": (2000, 10000),
                 "AeEnable": True,
@@ -174,7 +304,10 @@ if ENABLE_WEB_STREAM:
                 frame = camera_instance.web_frame
 
             if frame is None:
+                time.sleep(0.1)
                 continue
+
+            time.sleep(0.05)
 
             ret, jpeg = cv2.imencode('.jpg', frame)
             if not ret:
@@ -196,4 +329,3 @@ if ENABLE_WEB_STREAM:
             target=lambda: app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False),
             daemon=True
         ).start()
-
