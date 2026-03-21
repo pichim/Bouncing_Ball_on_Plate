@@ -89,7 +89,7 @@ SPI_NUM_FLOATS = 30  # Number of float values in each message
 SPI_MSG_SIZE = 1 + SPI_NUM_FLOATS * 4 + 1  # header + floats + checksum
 
 # Main task period (like the C++ example)
-main_task_period_us = 5000
+main_task_period_us = 1000
 
 # ------------------ CHANGED: always double-transfer ------------------
 ARM_GAP_US = 100  # small gap so the slave can re-arm/build fresh TX

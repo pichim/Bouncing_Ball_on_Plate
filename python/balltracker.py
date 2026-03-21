@@ -1,6 +1,7 @@
 import threading
 import queue
 import numpy as np
+import time
 from picamera2 import Picamera2
 import cv2
 ENABLE_WEB_STREAM = True  # <<< SET TO False TO DISABLE WEBSITE
@@ -63,13 +64,13 @@ class CameraProcessor:
 
         # K = scale_intrinsics(K_old, (640, 480), (1456, 1088))
 
-        K = np.array([
+        self.K = np.array([
         [914.91763, 0.0, 663.41604981],
         [0.0, 917.4751116, 526.47839392],
         [0.0, 0.0, 1.0]
         ], dtype=np.float64)
 
-        D = np.array([
+        self.D = np.array([
             [0.01584966],
             [0.01778682],
             [-0.14639213],
@@ -82,12 +83,11 @@ class CameraProcessor:
         w = 1456
 
         # --- build undistort maps ---
-        new_K = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-            K, D, (w, h), np.eye(3), balance=BALANCE
+        self.new_K = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+            self.K, self.D, (w, h), np.eye(3), balance=BALANCE
         )
-        global map1, map2
-        map1, map2 = cv2.fisheye.initUndistortRectifyMap(
-            K, D, np.eye(3), new_K, (w, h), cv2.CV_16SC2
+        self.map1, self.map2 = cv2.fisheye.initUndistortRectifyMap(
+            self.K, self.D, np.eye(3), self.new_K, (w, h), cv2.CV_16SC2
         )
 
 
@@ -127,14 +127,31 @@ class CameraProcessor:
             
 
 
-            # --- undistort frame ---
-            frame_undist = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-            # frame_undist = frame
+            # # --- undistort frame ---
+            # frame_undist = cv2.remap(frame, self.map1, self.map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            # # frame_undist = frame
             
 
-            x, y, r = self.detect_ball(frame_undist)
+            x_distorted, y_distorted, r = self.detect_ball(frame)
 
             if r > 5:  # valid detection
+
+                # 2. Punkt für OpenCV vorbereiten (braucht ein spezielles Numpy-Format: 1x1x2 Array)
+                pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
+
+                # 3. NUR diesen einen Punkt entzerren
+                # WICHTIG: Das P=new_K sorgt dafür, dass die Koordinaten wieder in normale 
+                # Pixel-Werte (wie bei deinem alten Bild) umgerechnet werden.
+                undistorted_pt = cv2.fisheye.undistortPoints(
+                    pt, 
+                    self.K, 
+                    self.D, 
+                    P=self.new_K
+                )
+
+                # 4. Die neuen, entzerrten Koordinaten auslesen
+                x = undistorted_pt[0][0][0]
+                y = undistorted_pt[0][0][1]
 
                 # coordinate system: (0,0) is center of image, +x right, +y down
                 x -= frame.shape[1] / 2
@@ -145,7 +162,7 @@ class CameraProcessor:
 
 
                 #make s constant for now to make it less error prone
-                s = 0.23900
+                s = 0.1890
                 R = s * r
                 X = s * x
                 Y = s * y
@@ -200,6 +217,13 @@ class CameraProcessor:
                 center = (int(x), int(y))
                 cv2.circle(frame, center, int(radius), (0, 255, 0), 2)
                 cv2.circle(frame, center, 2, (0, 0, 255), 3)
+        
+        # Höhe und Breite des Frames abfragen, Zentrum berechnen
+        h, w = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+
+        # Rotes Kreuz (+) im Bildzentrum einzeichnen
+        cv2.drawMarker(frame, (cx, cy), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
 
         # Save frame for website (with drawings already on it)
         if ENABLE_WEB_STREAM:
@@ -280,7 +304,10 @@ if ENABLE_WEB_STREAM:
                 frame = camera_instance.web_frame
 
             if frame is None:
+                time.sleep(0.1)
                 continue
+
+            time.sleep(0.05)
 
             ret, jpeg = cv2.imencode('.jpg', frame)
             if not ret:
