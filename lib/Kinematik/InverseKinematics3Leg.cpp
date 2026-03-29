@@ -4,6 +4,11 @@
 #include <cmath>
 #include <limits>
 
+InverseKinematics3Leg::InverseKinematics3Leg()
+    : InverseKinematics3Leg(Geometry{})
+{
+}
+
 InverseKinematics3Leg::InverseKinematics3Leg(const Geometry& geometry)
     : geometry_(geometry)
 {
@@ -141,9 +146,9 @@ InverseKinematics3Leg::Result InverseKinematics3Leg::compute(const Input& input)
         for (std::size_t k = 0; k < 2; ++k)
         {
             Hcand[k] = Vec3{
-                g.r0 + g.r1 * std::sin(cand[k]),
+                static_cast<float>(g.r0 + g.r1 * std::sin(cand[k])),
                 0.0,
-                -g.r1 * std::cos(cand[k])
+                static_cast<float>(-g.r1 * std::cos(cand[k]))
             };
 
             candDegWrap[k] = wrapDeg360(rad2deg(cand[k]));
@@ -209,22 +214,27 @@ InverseKinematics3Leg::Result InverseKinematics3Leg::compute(const Input& input)
 // PRIVATE HELPERS
 // ============================================================================
 
-double InverseKinematics3Leg::rad2deg(double rad)
+float InverseKinematics3Leg::rad2deg(float rad)
 {
-    return rad * 180.0 / kPi;
+    return rad * 180.0f / kPi;
 }
 
-double InverseKinematics3Leg::wrapDeg360(double deg)
+float InverseKinematics3Leg::deg2rad(float deg)
 {
-    double wrapped = std::fmod(deg, 360.0);
-    if (wrapped < 0.0)
+    return deg * kPi / 180.0f;
+}
+
+float InverseKinematics3Leg::wrapDeg360(float deg)
+{
+    float wrapped = std::fmod(deg, 360.0f);
+    if (wrapped < 0.0f)
     {
-        wrapped += 360.0;
+        wrapped += 360.0f;
     }
     return wrapped;
 }
 
-double InverseKinematics3Leg::clamp(double value, double minValue, double maxValue)
+float InverseKinematics3Leg::clamp(float value, float minValue, float maxValue)
 {
     return std::max(minValue, std::min(value, maxValue));
 }
@@ -239,12 +249,12 @@ InverseKinematics3Leg::Vec3 InverseKinematics3Leg::sub(const Vec3& a, const Vec3
     return Vec3{a.x - b.x, a.y - b.y, a.z - b.z};
 }
 
-InverseKinematics3Leg::Vec3 InverseKinematics3Leg::scale(const Vec3& v, double s)
+InverseKinematics3Leg::Vec3 InverseKinematics3Leg::scale(const Vec3& v, float s)
 {
     return Vec3{v.x * s, v.y * s, v.z * s};
 }
 
-double InverseKinematics3Leg::norm(const Vec3& v)
+float InverseKinematics3Leg::norm(const Vec3& v)
 {
     return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
@@ -258,10 +268,10 @@ InverseKinematics3Leg::Vec3 InverseKinematics3Leg::matVecMul(const Mat3& R, cons
     };
 }
 
-InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Rx(double phi)
+InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Rx(float phi)
 {
-    const double c = std::cos(phi);
-    const double s = std::sin(phi);
+    const float c = std::cos(phi);
+    const float s = std::sin(phi);
 
     Mat3 R{};
     R.m[0][0] = 1.0; R.m[0][1] = 0.0; R.m[0][2] = 0.0;
@@ -270,10 +280,10 @@ InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Rx(double phi)
     return R;
 }
 
-InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Ry(double phi)
+InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Ry(float phi)
 {
-    const double c = std::cos(phi);
-    const double s = std::sin(phi);
+    const float c = std::cos(phi);
+    const float s = std::sin(phi);
 
     Mat3 R{};
     R.m[0][0] = c;   R.m[0][1] = 0.0; R.m[0][2] = s;
@@ -282,10 +292,10 @@ InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Ry(double phi)
     return R;
 }
 
-InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Rz(double phi)
+InverseKinematics3Leg::Mat3 InverseKinematics3Leg::Rz(float phi)
 {
-    const double c = std::cos(phi);
-    const double s = std::sin(phi);
+    const float c = std::cos(phi);
+    const float s = std::sin(phi);
 
     Mat3 R{};
     R.m[0][0] = c;   R.m[0][1] = -s;  R.m[0][2] = 0.0;

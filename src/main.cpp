@@ -8,15 +8,15 @@
 
 int main()
 {
-    SPIComCntrl spiComCntrl;
-    spiComCntrl.enable();
+    // SPIComCntrl spiComCntrl;
+    // spiComCntrl.enable();
 
     InverseKinematics3Leg ik;
 
     // Example usage of InverseKinematics3Leg
     InverseKinematics3Leg::Input ikInput;
-    ikInput.roll = 0.1;   // [rad] roll
-    ikInput.pitch = 0.1;  // [rad] pitch
+    ikInput.roll = InverseKinematics3Leg::deg2rad(15);  // [rad] roll
+    ikInput.pitch = InverseKinematics3Leg::deg2rad(0);  // [rad] pitch
     ikInput.h = 100.0;    // [mm] height
 
     InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
