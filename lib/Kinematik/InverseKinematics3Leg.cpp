@@ -36,7 +36,8 @@ InverseKinematics3Leg::Result InverseKinematics3Leg::compute(const Input& input)
 
     std::array<Vec3, 3> P_tilt{};
     for (std::size_t i = 0; i < 3; ++i)
-    {
+    {   
+        // P_tilt[i] = Ry_pitch * (Rx_roll * P0[i])
         const Vec3 tmp = matVecMul(Rx_roll, P0[i]);
         P_tilt[i] = matVecMul(Ry_pitch, tmp);
     }
@@ -53,8 +54,8 @@ InverseKinematics3Leg::Result InverseKinematics3Leg::compute(const Input& input)
         const double y_i = P_tilt[i].y;
         const double th  = g.TH[i];
 
-        a[i] =  x_i * std::cos(th) + y_i * std::sin(th);
-        b[i] = -x_i * std::sin(th) + y_i * std::cos(th);
+        a[i] =  x_i * std::cos(th) + y_i * std::sin(th); // Koordinate des Punkts entlang der Beinrichtung
+        b[i] = -x_i * std::sin(th) + y_i * std::cos(th); // Koordinate des Punkts entlang der Beinrichtung
     }
 
     const double A = a[0] + a[1] + a[2];
@@ -64,11 +65,12 @@ InverseKinematics3Leg::Result InverseKinematics3Leg::compute(const Input& input)
 
     std::array<double, 3> f = {0.0, 0.0, 0.0};
     for (std::size_t i = 0; i < 3; ++i)
-    {
+    {   
+        // Seitlicher Fehler des Plattformpunkts P[i] nach der zusätzlichen yaw-Drehung
         f[i] = a[i] * std::sin(result.yaw) + b[i] * std::cos(result.yaw);
     }
 
-    result.dy = -f[0];
+    result.dy = -f[0];  // Korrigiert den Querfehler von Punkt 1 durch eine Verschiebung in y
     result.dx = (f[1] - f[2]) / std::sqrt(3.0);
 
     const Mat3 Rz_yaw = Rz(result.yaw);
@@ -76,6 +78,7 @@ InverseKinematics3Leg::Result InverseKinematics3Leg::compute(const Input& input)
     std::array<Vec3, 3> Pcorr{};
     for (std::size_t i = 0; i < 3; ++i)
     {
+        // Pcorr[i] = Rz(yaw) * P_tilt[i] + [dx; dy; h]
         const Vec3 rotated = matVecMul(Rz_yaw, P_tilt[i]);
         Pcorr[i] = add(rotated, Vec3{result.dx, result.dy, input.h});
     }
