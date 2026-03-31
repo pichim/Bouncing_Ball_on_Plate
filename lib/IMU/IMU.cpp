@@ -31,8 +31,15 @@ IMU::ImuData IMU::getImuData()
     m_ImuMPU6500.readAccAll();
 
     // skip first Nskip runs
-    if (m_skip_cntr++ < BBOP_IMU_NUM_RUNS_SKIP)
+    // if (m_skip_cntr++ < BBOP_IMU_NUM_RUNS_SKIP)
+    //     return m_ImuData;
+
+    if (m_skip_cntr < BBOP_IMU_NUM_RUNS_SKIP) {
+        m_skip_cntr++;
         return m_ImuData;
+    }
+
+    
 
     Eigen::Vector3f gyro(m_ImuMPU6500.getGyroX(), m_ImuMPU6500.getGyroY(), m_ImuMPU6500.getGyroZ());
     Eigen::Vector3f acc(m_ImuMPU6500.getAccX(), m_ImuMPU6500.getAccY(), m_ImuMPU6500.getAccZ());

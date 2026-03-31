@@ -42,8 +42,8 @@ private:
 
     // chirp parameters (start/end freq, duration) – sample period Ts set at runtime
     static constexpr float CHIRP_F0_HZ = 0.1f;
-    static constexpr float CHIRP_F1_HZ = 125.0f;
-    static constexpr float CHIRP_T1_S   = 100.0f;
+    static constexpr float CHIRP_F1_HZ = 245.0f;
+    static constexpr float CHIRP_T1_S   = 150.0f;
 
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;

@@ -91,7 +91,8 @@ void SPIComCntrl::executeTask()
         // comment out if dont want to use chirp signal and just want to control with ball position
         m_servo_commands[0] = servo_chirp;
         m_servoD0.setPulseWidth(m_servo_commands[0]);
-        
+        // m_servoD0.setPulseWidth(1.0f); // set to center position for testing
+
         // printf("Frequency: %.2f Hz | Excitation: %.3f | Servo Command: %.3f\n",
         //        m_chirp.getFreq(), chirp_exc, m_servo_commands[0]);
     }
