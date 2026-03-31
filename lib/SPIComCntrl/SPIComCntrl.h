@@ -9,6 +9,7 @@
 #include "Servo.h"
 #include "config.h"
 #include "mbed.h"
+#include "InverseKinematics3Leg.h"
 
 using namespace std::chrono;
 
@@ -19,11 +20,12 @@ public:
     virtual ~SPIComCntrl();
 
 private:
-    //MKS
-    static constexpr float SERVO_PULSE_MIN = 0.214f;
-    static constexpr float SERVO_PULSE_MAX = 0.536f;
+    // MKS
     // static constexpr float SERVO_PULSE_MIN = 0.214f;
     // static constexpr float SERVO_PULSE_MAX = 0.536f;
+    // reely S0090
+    float SERVO_PULSE_MIN = 0.0325f;
+    float SERVO_PULSE_MAX = 0.1175f;
     static constexpr float BALL_POS_CENTER_PX = 0.0f;
     static constexpr float SERVO_CENTER = 0.5161f;
     static constexpr float ANGLE_DELTA_LIMIT_GRAD = 30.0f;
@@ -41,7 +43,12 @@ private:
     static constexpr float BALL_CTRL_TAU_R_O = 0.0265f; //0.0138f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
-    
+
+    float cos_theta_rotation;
+    float sin_theta_rotation;
+    float camera_offset_angle_deg;
+    float camera_offset_angle_rad;
+
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;
 
@@ -57,7 +64,8 @@ private:
     microseconds m_time_previous_us{0};
 
     float m_Ts;
-    PIDCntrl m_ballPosCntrl;
+    PIDCntrl m_ballPosCntrl_x;
+    PIDCntrl m_ballPosCntrl_y;
 
     float m_servo_commands[3]{};
 

@@ -1,5 +1,6 @@
 #include "SPIComCntrl.h"
 
+
 SPIComCntrl::SPIComCntrl()
     : RealTimeThread(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US,
                      BBOP_SPI_COM_CNTRL_THREAD_PRIORITY,
@@ -28,7 +29,8 @@ SPIComCntrl::SPIComCntrl()
 
     //create PD-T1 controller
     // m_ballPosCntrl = PIDCntrl(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
-    m_ballPosCntrl.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
 
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
@@ -39,11 +41,18 @@ SPIComCntrl::SPIComCntrl()
         m_servoD0.enable(SERVO_CENTER);
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable();
+        m_servoD1.enable(SERVO_CENTER);
     }
     if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable();
+        m_servoD2.enable(SERVO_CENTER);
     }
+        // Verdrehungswinkel definieren
+    camera_offset_angle_deg = 90.0f - 14.73f + 90.0f;
+    camera_offset_angle_rad = DegreeToRad(camera_offset_angle_deg);
+
+    // 3. Berechne Sinus und Kosinus
+    cos_theta_rotation = std::cos(camera_offset_angle_rad);
+    sin_theta_rotation = std::sin(camera_offset_angle_rad);
 
     m_Timer.start();
 
@@ -51,6 +60,9 @@ SPIComCntrl::SPIComCntrl()
 }
 
 SPIComCntrl::~SPIComCntrl() = default;
+
+InverseKinematics3Leg ik;
+InverseKinematics3Leg::Input ikInput;
 
 void SPIComCntrl::executeTask()
 {
@@ -66,8 +78,8 @@ void SPIComCntrl::executeTask()
 
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
-    if (!m_Imu.isCalibrated())
-        return;
+    // if (!m_Imu.isCalibrated())
+    //     return;
 
 
 
@@ -80,7 +92,8 @@ void SPIComCntrl::executeTask()
         
         // Wenn der Ball länger weg war, Regler-Historie löschen, um Schock zu vermeiden
         if ((missing_data_counter * m_Ts) > VISION_TIMEOUT) { 
-            m_ballPosCntrl.reset(0.0f); 
+            m_ballPosCntrl_x.reset(0.0f); 
+            m_ballPosCntrl_y.reset(0.0f); 
         }
         missing_data_counter = 0; // Ball ist wieder da, Counter resetten
 
@@ -104,24 +117,70 @@ void SPIComCntrl::executeTask()
     }
 
 
-    if (m_Imu.isCalibrated()) {
+    if (m_Imu.isCalibrated() || !m_Imu.isCalibrated()) {
         
         if ((missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
             
-            // 2) Calculate error between ball position and center
-            float error = m_spiData.data[0]; //input in mm
+            // Calculate error between ball position and center
+            float error_x = m_spiData.data[0]; //input in mm
+            float error_y = m_spiData.data[1]; //input in mm
 
-            // 3) Update Control output (PD) to get servo commands
-            float control_output_grad = m_ballPosCntrl.update(0.0 - error);
-            float control_output = DegreeToPWM(control_output_grad);
+            // Update Control output (PD) to get servo commands
+            // float control_output_x_grad = m_ballPosCntrl_x.update(0.0 - error_x);
+            // float control_output_y_grad = m_ballPosCntrl_y.update(0.0 - error_y);
+            float control_output_x_grad = m_spiData.data[0] * 0.1f; // Proportional control only for testing
+            float control_output_y_grad = m_spiData.data[1] * 0.1f; // Proportional control only for testing
 
-            m_servo_commands[0] = clamp(SERVO_CENTER + control_output, 0.0f, 1.0f);
+            // rotate control outputs
+            float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
+            float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
+
+            ikInput.roll = DegreeToRad(rotated_output_x);
+            ikInput.pitch = DegreeToRad(rotated_output_y);
+
+            // ikInput.roll = DegreeToRad(15.0f);
+            // ikInput.pitch = DegreeToRad(0.0f);
+            ikInput.h = 70.0f;
+
+            InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
+
+            printf("IK Success: %d | Roll Cmd: %.2f deg | Pitch Cmd: %.2f deg | AlphaDeg: [%.2f, %.2f, %.2f]\n",
+                   ikResult.success,
+                   rotated_output_x,
+                   rotated_output_y,
+                   ikResult.alphaDeg[0],
+                   ikResult.alphaDeg[1],
+                   ikResult.alphaDeg[2]);
+    
+
+
+            float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - 35.0f - 55.0f);
+            float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - 35.0f - 55.0f);
+            float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - 35.0f - 55.0f);
+
+            printf("Control Outputs (PWM): %.3f, %.3f, %.3f\n", control_output_1, control_output_2, control_output_3);
+
+            m_servo_commands[0] = clamp(SERVO_CENTER + control_output_1, 0.3f, 0.7f);
+            m_servo_commands[1] = clamp(SERVO_CENTER + control_output_2, 0.3f, 0.7f);
+            m_servo_commands[2] = clamp(SERVO_CENTER + control_output_3, 0.3f, 0.7f);
+            // m_servo_commands[0] = DegreeToPWM(55.0f);
+            // m_servo_commands[1] = DegreeToPWM(55.0f);
+            // m_servo_commands[2] = DegreeToPWM(55.0f);
 
         } else {
-            m_servo_commands[0] = SERVO_CENTER;
+            // m_servo_commands[0] = SERVO_CENTER;
+            // m_servo_commands[1] = SERVO_CENTER;
+            // m_servo_commands[2] = SERVO_CENTER;
+            printf("Ball lost! Holding servos at center. Missing data for %.2f seconds.\n", missing_data_counter * m_Ts);
         }
 
         m_servoD0.setPulseWidth(m_servo_commands[0]);
+        m_servoD1.setPulseWidth(m_servo_commands[1]);
+        m_servoD2.setPulseWidth(m_servo_commands[2]);
+
+        // m_servoD0.setPulseWidth(0.5f);
+        // m_servoD1.setPulseWidth(0.5f);
+        // m_servoD2.setPulseWidth(0.5f);
     }
 
     // Prepare next reply
