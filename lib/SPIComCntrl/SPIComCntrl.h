@@ -24,18 +24,24 @@ private:
     static constexpr float SERVO_PULSE_MAX = 0.536f;
     // static constexpr float SERVO_PULSE_MIN = 0.214f;
     // static constexpr float SERVO_PULSE_MAX = 0.536f;
-    static constexpr float BALL_POS_MIN_PX = -80.0f;
-    static constexpr float BALL_POS_MAX_PX = 80.0f;
     static constexpr float BALL_POS_CENTER_PX = 0.0f;
     static constexpr float SERVO_CENTER = 0.5161f;
     static constexpr float ANGLE_DELTA_LIMIT_GRAD = 30.0f;
-    static constexpr float BALL_CTRL_KP = 0.2f;
+    // Michis Reglerwerte
+    // static constexpr float BALL_CTRL_KP = 0.1f; //0.2f;
+    // static constexpr float BALL_CTRL_KI = 0.0f;
+    // static constexpr float BALL_CTRL_TAU_D_S = 0.0796f; //0.0413f * 1.0f;
+    // static constexpr float BALL_CTRL_TAU_R_O = 0.0265f; //0.0138f;
+    // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f);
+    // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+
+    static constexpr float BALL_CTRL_KP = 0.1f; //0.2f;
     static constexpr float BALL_CTRL_KI = 0.0f;
-    static constexpr float BALL_CTRL_TAU_D_S = 0.0413f * 1.0f;
-    static constexpr float BALL_CTRL_TAU_R_O = 0.000001f;
+    static constexpr float BALL_CTRL_TAU_D_S = 0.0796f; //0.0413f * 1.0f;
+    static constexpr float BALL_CTRL_TAU_R_O = 0.0265f; //0.0138f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
-
+    
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;
 
