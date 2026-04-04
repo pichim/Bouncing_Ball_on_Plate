@@ -11,8 +11,8 @@ public:
     {
         float r0 = 61.001;   // radius of motor axes
         float r1 = 72.5;     // servo horn length
-        float r2 = 72.5;     // rod length
-        float rp = 100.0;    // platform radius
+        float r2 = 101.5;     // rod length
+        float rp = 215.0 / 2.0;    // platform radius
 
         // Motor azimuth angles [rad]
         std::array<float, 3> TH = {

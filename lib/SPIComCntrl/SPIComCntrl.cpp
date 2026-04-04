@@ -46,7 +46,8 @@ SPIComCntrl::SPIComCntrl()
     if (!m_servoD2.isEnabled()) {
         m_servoD2.enable(SERVO_CENTER);
     }
-        // Verdrehungswinkel definieren
+    
+    // Verdrehungswinkel definieren
     camera_offset_angle_deg = 90.0f - 14.73f + 90.0f;
     camera_offset_angle_rad = DegreeToRad(camera_offset_angle_deg);
 
@@ -126,10 +127,11 @@ void SPIComCntrl::executeTask()
             float error_y = m_spiData.data[1]; //input in mm
 
             // Update Control output (PD) to get servo commands
-            // float control_output_x_grad = m_ballPosCntrl_x.update(0.0 - error_x);
-            // float control_output_y_grad = m_ballPosCntrl_y.update(0.0 - error_y);
-            float control_output_x_grad = m_spiData.data[0] * 0.1f; // Proportional control only for testing
-            float control_output_y_grad = m_spiData.data[1] * 0.1f; // Proportional control only for testing
+            float control_output_x_grad = m_ballPosCntrl_x.update(0.0 - error_x);
+            float control_output_y_grad = m_ballPosCntrl_y.update(0.0 - error_y);
+            // For testing, we can start with a simple proportional controller and add the derivative term later
+            // float control_output_x_grad = -error_x * 0.1f; // Proportional control only for testing
+            // float control_output_y_grad = -error_y * 0.1f; // Proportional control only for testing
 
             // rotate control outputs
             float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
