@@ -37,11 +37,11 @@ private:
     // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f);
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
-    static constexpr float BALL_CTRL_KP = 0.1f; //0.2f;
+    static constexpr float BALL_CTRL_KP = 0.003f; //0.2f;
     static constexpr float BALL_CTRL_KI = 0.0f;
-    static constexpr float BALL_CTRL_TAU_D_S = 0.0796f; //0.0413f * 1.0f;
-    static constexpr float BALL_CTRL_TAU_R_O = 0.0265f; //0.0138f;
-    static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f);
+    static constexpr float BALL_CTRL_TAU_D_S = 0.0531f; //0.0413f * 1.0f;
+    static constexpr float BALL_CTRL_TAU_R_O = 0.0177f; //0.0138f;
+    static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f) * 4;
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
     float cos_theta_rotation;
