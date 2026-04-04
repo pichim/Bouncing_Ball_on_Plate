@@ -27,7 +27,7 @@ class CameraProcessor:
 
         # --- Shared state for main ---
         self.lock = threading.Lock()
-        self.ball_pos = (0.0, 0.0)
+        self.ball_pos = (0.0, 0.0, 0.0, 0.0)
         self.new_data = False
 
         # --- Worker thread ---
@@ -112,11 +112,16 @@ class CameraProcessor:
         except queue.Full:
             pass
 
+
     # =========================================================
     # Worker thread (ball detection)
     # =========================================================
     def _worker_loop(self):
-
+        
+        # --- SCHALTER ZUM TESTEN ---
+        # True  = Ganzes Bild entzerren (Hohe Präzision, langsam)
+        # False = Nur den Punkt entzerren (Schnell, am Rand ungenau für Z)
+        FULL_FRAME_UNDISTORT = True
 
         while self.running:
             try:
@@ -124,72 +129,60 @@ class CameraProcessor:
             except queue.Empty:
                 continue
 
-            
+            # Startzeit für die Performancemessung
+            start_time = time.time()
+
+            if FULL_FRAME_UNDISTORT:
+                # --- METHODE 1: Vollbild-Entzerrung ---
+                # Das ganze Bild geradeziehen, bevor der Ball gesucht wird
+                frame_process = cv2.remap(frame, self.map1, self.map2, 
+                                          interpolation=cv2.INTER_LINEAR, 
+                                          borderMode=cv2.BORDER_CONSTANT)
+                
+                # Ball im bereits perfekten Bild suchen
+                x_px, y_px, r = self.detect_ball(frame_process)
+                f_avg = (self.new_K[0, 0] + self.new_K[1, 1]) / 2.0
+                
+            else:
+                # --- METHODE 2: Punkt-Entzerrung (wie bisher) ---
+                frame_process = frame
+                x_distorted, y_distorted, r = self.detect_ball(frame_process)
+                
+                if r > 5:
+                    pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
+                    undistorted_pt = cv2.fisheye.undistortPoints(
+                        pt, self.K, self.D, P=self.new_K
+                    )
+                    x_px = undistorted_pt[0][0][0]
+                    y_px = undistorted_pt[0][0][1]
+                    f_avg = (self.K[0, 0] + self.K[1, 1]) / 2.0
 
 
-            # # --- undistort frame ---
-            # frame_undist = cv2.remap(frame, self.map1, self.map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-            # # frame_undist = frame
-            
-
-            x_distorted, y_distorted, r = self.detect_ball(frame)
-
+            # --- BERECHNUNG (für beide Methoden gleich) ---
             if r > 5:  # valid detection
+                # Parameter aus der NEUEN Kameramatrix auslesen
+                fx = self.new_K[0, 0]
+                fy = self.new_K[1, 1]
+                cx = self.new_K[0, 2]
+                cy = self.new_K[1, 2]
 
-                # 2. Punkt für OpenCV vorbereiten (braucht ein spezielles Numpy-Format: 1x1x2 Array)
-                pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
+                R_real = 20.0  # mm
+                
 
-                # 3. NUR diesen einen Punkt entzerren
-                # WICHTIG: Das P=new_K sorgt dafür, dass die Koordinaten wieder in normale 
-                # Pixel-Werte (wie bei deinem alten Bild) umgerechnet werden.
-                undistorted_pt = cv2.fisheye.undistortPoints(
-                    pt, 
-                    self.K, 
-                    self.D, 
-                    P=self.new_K
-                )
+                # 3D-Position berechnen
+                Z = (R_real * f_avg) / r
+                X = (x_px - cx) * Z / fx
+                Y = (y_px - cy) * Z / fy
 
-                # 4. Die neuen, entzerrten Koordinaten auslesen
-                x = undistorted_pt[0][0][0]
-                y = undistorted_pt[0][0][1]
+                # Zeitmessung abschließen
+                processing_time_ms = (time.time() - start_time) * 1000
 
-                # coordinate system: (0,0) is center of image, +x right, +y down
-                x -= frame.shape[1] / 2
-                y -= frame.shape[0] / 2
-
-                # calculates scale factor with given ball radius = 20mm
-                s = 20 / r
-
-
-                #make s constant for now to make it less error prone
-                s = 0.1890
-                R = s * r
-                X = s * x
-                Y = s * y
-
-
-
-                # print(
-                #         f"""
-                #     --- Ball Measurement ---
-                #     Pixel values:
-                #     x_px = {x:.2f}
-                #     y_px = {y:.2f}
-                #     r_px = {r:.2f}
-
-                #     Scale:
-                #     s = {s:.4f} mm/px
-
-                #     Converted values:
-                #     R_mm = {R:.2f}
-                #     X_mm = {X:.2f}
-                #     Y_mm = {Y:.2f}
-                #     ------------------------
-                #     """
-                #     )
+                print(f"Modus: {'Vollbild' if FULL_FRAME_UNDISTORT else 'Punkt'} | "
+                      f"Zeit: {processing_time_ms:.1f} ms | "
+                      f"Radius: {r:.2f} px | Distanz Z: {Z:.1f} mm")
 
                 with self.lock:
-                    self.ball_pos = (X, Y, R)
+                    self.ball_pos = (X, Y, Z, processing_time_ms)
                     self.new_data = True
 
     # =========================================================
@@ -201,8 +194,11 @@ class CameraProcessor:
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
         # range for pingpong ball
-        lower_orange = np.array([5, 150, 150])
-        upper_orange = np.array([25, 255, 255])
+        # lower_orange = np.array([5, 150, 150])
+        # upper_orange = np.array([25, 255, 255])
+
+        lower_orange = np.array([10, 150, 100])
+        upper_orange = np.array([20, 255, 255])
 
         # range for red massive ball
         #lower_orange = np.array([170, 120, 60])
@@ -222,8 +218,11 @@ class CameraProcessor:
         h, w = frame.shape[:2]
         cx, cy = w // 2, h // 2
 
+        new_cx = int(self.new_K[0, 2])
+        new_cy = int(self.new_K[1, 2])
+
         # Rotes Kreuz (+) im Bildzentrum einzeichnen
-        cv2.drawMarker(frame, (cx, cy), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+        cv2.drawMarker(frame, (new_cx, new_cy), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
 
         # Save frame for website (with drawings already on it)
         if ENABLE_WEB_STREAM:

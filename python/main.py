@@ -227,9 +227,9 @@ while True:
             #     print(x, y, r)
 
         if pos is not None:
-            x, y, r = pos
+            x, y, r, processing_time_ms = pos
         else:
-            x, y, r = 0.0, 0.0, 0.0
+            x, y, r, processing_time_ms = 0.0, 0.0, 0.0, 0.0
         #print(x, y, r)
 
 
@@ -252,6 +252,7 @@ while True:
         transmitted_data.data[0] = x
         transmitted_data.data[1] = y
         transmitted_data.data[2] = r
+        transmitted_data.data[3] = processing_time_ms
 
         # OPTIMIZED: pack all floats in one go
         struct.pack_into("<%df" % SPI_NUM_FLOATS, tx2, 1, *transmitted_data.data)
