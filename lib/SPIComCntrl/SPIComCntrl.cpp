@@ -77,12 +77,23 @@ void SPIComCntrl::executeTask()
     const float dtime_us = duration_cast<microseconds>(time_us - m_time_previous_us).count();
     m_time_previous_us = time_us;
 
+    // Trajektorie einmal pro Zyklus berechnen
+    float t_s = duration_cast<microseconds>(time_us).count() * 1.0e-6f;
+
+    // Konstante Soll-Position
+    // float xd = 0.0f;
+    // float yd = 0.0f;
+
+    // Kreis Trajektorie mit 0.05m Radius und 0.1 Hz Frequenz
+    float f = 0.1f;      // Hz
+    float R = 50.0f;     // mm
+    float xd = R * std::cos(2.0f * PI * f * t_s);
+    float yd = R * std::sin(2.0f * PI * f * t_s);
+
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
     // if (!m_Imu.isCalibrated())
     //     return;
-
-
 
     // Handle SPI communication: check for new data, update control, prepare reply  
     static int missing_data_counter = 0;
@@ -103,17 +114,6 @@ void SPIComCntrl::executeTask()
         if (missing_data_counter > 0) { 
             // Wir setzen den Regler auf den AKTUELLEN Fehlerwert, 
             // damit delta_error im nächsten Schritt 0 ist.
-            
-            // Konstante Soll-Position
-            // float xd = 0.0f;
-            // float yd = 0.0f;
-
-            // Kreis Trajektorie mit 5 cm Radius und 0.1 Hz Frequenz
-            float f = 0.1f; // Frequenz in Hz
-            float R = 0.05f; // Radius in Metern (5 cm)
-            float t_s = duration_cast<microseconds>(m_Timer.elapsed_time()).count() * 1.0e-6f;
-            float xd = R * std::cos(2.0f * PI * f * t_s);
-            float yd = R * std::sin(2.0f * PI * f * t_s);
 
             // Aktueller Fehler als Startwert für den Regler
             float current_error_x = xd - m_spiData.data[0];
@@ -151,14 +151,13 @@ void SPIComCntrl::executeTask()
         
         if ((missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
             
-            // Calculate error between ball position and center
-            float error_x = m_spiData.data[0]; //input in mm
-            float error_y = m_spiData.data[1]; //input in mm
+            // Calculate error between desired postion and current ball position
+            float error_x = xd - m_spiData.data[0]; //input in mm
+            float error_y = yd - m_spiData.data[1]; //input in mm
 
             // Update Control output (PD) to get servo commands
-            float control_output_x_grad = m_ballPosCntrl_x.update(0.0 - error_x);
-            float control_output_y_grad = m_ballPosCntrl_y.update(0.0 - error_y);
-            
+            float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
+            float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
 
             // rotate control outputs
             float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
@@ -167,16 +166,13 @@ void SPIComCntrl::executeTask()
             ikInput.pitch = DegreeToRad(rotated_output_x);
             ikInput.roll = -DegreeToRad(rotated_output_y);
 
+            // ikInput.roll = DegreeToRad(0.0f);
+            // ikInput.pitch = DegreeToRad(0.0f);
+            ikInput.h = 80.0f;
+
             printf("Control Outputs (Rotated, Degrees): Roll Cmd: %.2f deg | Pitch Cmd: %.2f deg\n",
                    -rotated_output_y,
                    rotated_output_x);
-
-            // ikInput.pitch = DegreeToRad(control_output_x_grad);
-            // ikInput.roll = DegreeToRad(control_output_y_grad);
-
-            // ikInput.roll = DegreeToRad(0.0f);
-            // ikInput.pitch = DegreeToRad(10.0f);
-            ikInput.h = 80.0f;
 
             InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
 
@@ -184,8 +180,6 @@ void SPIComCntrl::executeTask()
                    ikResult.alphaDeg[0],
                    ikResult.alphaDeg[1],
                    ikResult.alphaDeg[2]);
-    
-
 
             float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - 35.0f - 55.0f);
             float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - 35.0f - 55.0f);
