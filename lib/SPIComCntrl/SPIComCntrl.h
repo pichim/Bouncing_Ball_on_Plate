@@ -43,6 +43,7 @@ private:
     static constexpr float BALL_CTRL_TAU_R_O = 0.0265f; //0.0138f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+    static constexpr float PI = 3.14159265358979323846f;
 
     float cos_theta_rotation;
     float sin_theta_rotation;

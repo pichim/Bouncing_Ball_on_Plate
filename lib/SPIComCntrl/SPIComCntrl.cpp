@@ -1,4 +1,5 @@
 #include "SPIComCntrl.h"
+#include <cmath>
 
 
 SPIComCntrl::SPIComCntrl()
@@ -102,9 +103,22 @@ void SPIComCntrl::executeTask()
         if (missing_data_counter > 0) { 
             // Wir setzen den Regler auf den AKTUELLEN Fehlerwert, 
             // damit delta_error im nächsten Schritt 0 ist.
-            float current_error_x = 0.0f - m_spiData.data[0];
-            float current_error_y = 0.0f - m_spiData.data[1];
             
+            // Konstante Soll-Position
+            // float xd = 0.0f;
+            // float yd = 0.0f;
+
+            // Kreis Trajektorie mit 5 cm Radius und 0.1 Hz Frequenz
+            float f = 0.1f; // Frequenz in Hz
+            float R = 0.05f; // Radius in Metern (5 cm)
+            float t_s = duration_cast<microseconds>(m_Timer.elapsed_time()).count() * 1.0e-6f;
+            float xd = R * std::cos(2.0f * PI * f * t_s);
+            float yd = R * std::sin(2.0f * PI * f * t_s);
+
+            // Aktueller Fehler als Startwert für den Regler
+            float current_error_x = xd - m_spiData.data[0];
+            float current_error_y = yd - m_spiData.data[1];
+
             m_ballPosCntrl_x.reset(current_error_x); 
             m_ballPosCntrl_y.reset(current_error_y); 
             
