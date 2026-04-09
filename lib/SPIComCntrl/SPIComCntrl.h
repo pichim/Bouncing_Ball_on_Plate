@@ -23,12 +23,11 @@ private:
     // MKS
     // static constexpr float SERVO_PULSE_MIN = 0.214f;
     // static constexpr float SERVO_PULSE_MAX = 0.536f;
-    // reely S0090
-    float SERVO_PULSE_MIN = 0.0325f;
-    float SERVO_PULSE_MAX = 0.1175f;
+    // MKS HBL669
+    float SERVO_PULSE_MIN = 0.2125f;
+    float SERVO_PULSE_MAX = 0.5375f;
     static constexpr float BALL_POS_CENTER_PX = 0.0f;
-    static constexpr float SERVO_CENTER = 0.5161f;
-    static constexpr float ANGLE_DELTA_LIMIT_GRAD = 30.0f;
+    static constexpr float ANGLE_DELTA_LIMIT_GRAD = 20.0f;
     // Michis Reglerwerte
     // static constexpr float BALL_CTRL_KP = 0.1f; //0.2f;
     // static constexpr float BALL_CTRL_KI = 0.0f;

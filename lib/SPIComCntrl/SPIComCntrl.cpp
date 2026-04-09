@@ -39,13 +39,13 @@ SPIComCntrl::SPIComCntrl()
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
 
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(0.387f); // Start at center position
+        m_servoD0.enable(DegreeToPWM(90.0f));
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(0.370f);
+        m_servoD1.enable(DegreeToPWM(90.0f));
     }
     if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable(0.382f);
+        m_servoD2.enable(DegreeToPWM(90.0f));
     }
         // Verdrehungswinkel definieren
     camera_offset_angle_deg = 90.0f + 14.73f;
@@ -81,14 +81,14 @@ void SPIComCntrl::executeTask()
     float t_s = duration_cast<microseconds>(time_us).count() * 1.0e-6f;
 
     // Konstante Soll-Position
-    // float xd = 0.0f;
-    // float yd = 0.0f;
+    float xd = 0.0f;
+    float yd = 0.0f;
 
-    // Kreis Trajektorie mit 0.05m Radius und 0.1 Hz Frequenz
-    float f = 0.1f;      // Hz
-    float R = 50.0f;     // mm
-    float xd = R * std::cos(2.0f * PI * f * t_s);
-    float yd = R * std::sin(2.0f * PI * f * t_s);
+    // // Kreis Trajektorie mit 50mm Radius und 0.1 Hz Frequenz
+    // float f = 0.1f;      // Hz
+    // float R = 50.0f;     // mm
+    // float xd = R * std::cos(2.0f * PI * f * t_s);
+    // float yd = R * std::sin(2.0f * PI * f * t_s);
 
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
@@ -121,12 +121,9 @@ void SPIComCntrl::executeTask()
 
             m_ballPosCntrl_x.reset(current_error_x); 
             m_ballPosCntrl_y.reset(current_error_y); 
-            
-            printf("Ball re-detected. Resetting controller to prevent D-kick.\n");
         }
         
         missing_data_counter = 0;
-
 
         // // When logging via SerialStream you have to uncomment this print
         // printf("Message: %lu | Delta Time: %lu us | "
@@ -163,56 +160,44 @@ void SPIComCntrl::executeTask()
             float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
             float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
 
+            // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
             ikInput.pitch = DegreeToRad(rotated_output_x);
             ikInput.roll = -DegreeToRad(rotated_output_y);
-
-            // ikInput.roll = DegreeToRad(0.0f);
-            // ikInput.pitch = DegreeToRad(0.0f);
-            ikInput.h = 80.0f;
-
-            printf("Control Outputs (Rotated, Degrees): Roll Cmd: %.2f deg | Pitch Cmd: %.2f deg\n",
-                   -rotated_output_y,
-                   rotated_output_x);
-
+            ikInput.h = 98.0f;
+            
+            // Inverse Kinematik berechnen
             InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
 
-            printf("AlphaDeg: [%.2f, %.2f, %.2f]\n",
+            printf("Servowinkel in Grad: [%.2f, %.2f, %.2f]\n",
                    ikResult.alphaDeg[0],
                    ikResult.alphaDeg[1],
                    ikResult.alphaDeg[2]);
+            
+            constexpr float SERVO_NEUTRAL_DEG = 90.0f; // Neutralstellung der Servos in Grad (Servohorn zeigt nach aussen)
 
-            float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - 35.0f - 55.0f);
-            float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - 35.0f - 55.0f);
-            float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - 35.0f - 55.0f);
-
-            // printf("Control Outputs (PWM): %.3f, %.3f, %.3f\n", control_output_1, control_output_2, control_output_3);
-
-            m_servo_commands[0] = clamp(SERVO_CENTER + control_output_1, 0.357f, 0.417f);
-            m_servo_commands[1] = clamp(SERVO_CENTER + control_output_2, 0.340f, 0.400f);
-            m_servo_commands[2] = clamp(SERVO_CENTER + control_output_3, 0.352f, 0.412f);
-
-            printf("Servo Commands (PWM): D0: %.3f | D1: %.3f | D2: %.3f\n",
-                   m_servo_commands[0],
-                   m_servo_commands[1],
-                   m_servo_commands[2]);
-            // m_servo_commands[0] = DegreeToPWM(55.0f);
-            // m_servo_commands[1] = DegreeToPWM(55.0f);
-            // m_servo_commands[2] = DegreeToPWM(55.0f);
+            float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - SERVO_NEUTRAL_DEG);
+            float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - SERVO_NEUTRAL_DEG);
+            float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - SERVO_NEUTRAL_DEG);
+            
+            // Servo-Mitte und Begrenzung definieren
+            float SERVO_CENTER = DegreeToPWM(SERVO_NEUTRAL_DEG);
+            float delta20 = DegreeToPWM(20.0f);
+            
+            // Servo-Befehle berechnen und begrenzen
+            m_servo_commands[0] = clamp(SERVO_CENTER + control_output_1, SERVO_CENTER - delta20, SERVO_CENTER + delta20);
+            m_servo_commands[1] = clamp(SERVO_CENTER + control_output_2, SERVO_CENTER - delta20, SERVO_CENTER + delta20);
+            m_servo_commands[2] = clamp(SERVO_CENTER + control_output_3, SERVO_CENTER - delta20, SERVO_CENTER + delta20);
 
         } else {
-            m_servo_commands[0] = 0.387;
-            m_servo_commands[1] = 0.370;
-            m_servo_commands[2] = 0.382;
-            printf("Ball lost! Holding servos at center. Missing data for %.2f seconds.\n", missing_data_counter * m_Ts);
+            // Ball weg, Servos in Mittelstellung halten
+            m_servo_commands[0] = DegreeToPWM(90.0f);
+            m_servo_commands[1] = DegreeToPWM(90.0f);
+            m_servo_commands[2] = DegreeToPWM(90.0f);
         }
 
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
         m_servoD2.setPulseWidth(m_servo_commands[2]);
-
-        // m_servoD0.setPulseWidth(0.5f);
-        // m_servoD1.setPulseWidth(0.5f);
-        // m_servoD2.setPulseWidth(0.5f);
     }
 
     // Prepare next reply
