@@ -60,7 +60,7 @@ InverseKinematics3Leg::Result InverseKinematics3Leg::compute(const Input& input)
         const double th  = g.TH[i];
 
         a[i] =  x_i * std::cos(th) + y_i * std::sin(th); // Koordinate des Punkts entlang der Beinrichtung
-        b[i] = -x_i * std::sin(th) + y_i * std::cos(th); // Koordinate des Punkts entlang der Beinrichtung
+        b[i] = -x_i * std::sin(th) + y_i * std::cos(th); // Koordinate des Punkts seitlich der Beinrichtung
     }
 
     const double A = a[0] + a[1] + a[2];
