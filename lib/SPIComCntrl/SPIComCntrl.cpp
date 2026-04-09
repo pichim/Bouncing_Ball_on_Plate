@@ -114,7 +114,6 @@ void SPIComCntrl::executeTask()
     float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - 90.0f);
 
     float delta20 = DegreeToPWM(20.0f);
-    float delta90 = DegreeToPWM(90.0f);
 
     m_servo_commands[0] = clamp(0.387f + control_output_1, 0.387f - delta20, 0.387f + delta20);
     m_servo_commands[1] = clamp(0.370f + control_output_2, 0.370f - delta20, 0.370f + delta20);
