@@ -10,8 +10,8 @@ public:
     struct Geometry
     {
         float r0 = 61.001;              // radius of motor axes
-        float r1 = 85.0;                // servo horn length
-        float r2 = 117.0;               // rod length
+        float r1 = 72.5;                // servo horn length
+        float r2 = 101.5;               // rod length
         float rp = 215.0 / 2.0;         // platform radius
 
         // Motor azimuth angles [rad]
@@ -26,7 +26,7 @@ public:
     {
         float roll  = 0.0;   // [rad]
         float pitch = 0.0;   // [rad]
-        float h     = 110.5; // [same length unit as geometry]
+        float h     = 98.1; // [same length unit as geometry]
     };
 
     struct Result

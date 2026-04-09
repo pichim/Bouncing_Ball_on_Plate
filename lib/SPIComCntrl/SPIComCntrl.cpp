@@ -68,18 +68,18 @@ void SPIComCntrl::executeTask()
     // ============================================================
 
     // Example test pose
-    ikInput.roll  = DegreeToRad(0.0f);    // [rad]
+    ikInput.roll  = DegreeToRad(0.0f);      // [rad]
     ikInput.pitch = DegreeToRad(0.0f);    // [rad]
-    ikInput.h     = 110.5f;               // [mm]
+    ikInput.h     = 70.0f;                  // [mm]
 
     // Example alternative test cases:
     // ikInput.roll  = DegreeToRad(5.0f);
     // ikInput.pitch = DegreeToRad(0.0f);
-    // ikInput.h     = 110.5f;
+    // ikInput.h     = 98.1f;
 
     // ikInput.roll  = DegreeToRad(0.0f);
     // ikInput.pitch = DegreeToRad(5.0f);
-    // ikInput.h     = 110.5f;
+    // ikInput.h     = 98.1f;
 
     InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
 
@@ -113,10 +113,12 @@ void SPIComCntrl::executeTask()
     float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - 90.0f);
     float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - 90.0f);
 
-    // Clamp to allowed range around each servo center
-    m_servo_commands[0] = clamp(0.387f + control_output_1, 0.357f, 0.417f);
-    m_servo_commands[1] = clamp(0.370f + control_output_2, 0.340f, 0.400f);
-    m_servo_commands[2] = clamp(0.382f + control_output_3, 0.352f, 0.412f);
+    float delta20 = DegreeToPWM(20.0f);
+    float delta90 = DegreeToPWM(90.0f);
+
+    m_servo_commands[0] = clamp(0.387f + control_output_1, 0.387f - delta20, 0.387f + delta20);
+    m_servo_commands[1] = clamp(0.370f + control_output_2, 0.370f - delta20, 0.370f + delta20);
+    m_servo_commands[2] = clamp(0.382f + control_output_3, 0.382f - delta20, 0.382f + delta20);
 
     printf("Servo Commands (PWM): D0: %.3f | D1: %.3f | D2: %.3f\n",
            m_servo_commands[0],

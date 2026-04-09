@@ -38,4 +38,6 @@
 #define BBOP_LOG_COM_UART_TX_PIN PA_9
 #define BBOP_LOG_COM_UART_RX_PIN PA_10
 
+#define BBOP_SERVO_angle_range_grad 110.0f
+
 #endif /* BBOP_CONFIG_H_ */
