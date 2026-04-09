@@ -1,4 +1,5 @@
 #include "SPIComCntrl.h"
+#include "InverseKinematics3Leg.h"
 
 SPIComCntrl::SPIComCntrl()
     : RealTimeThread(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US,
@@ -17,110 +18,115 @@ SPIComCntrl::SPIComCntrl()
     , m_SerialStream(BBOP_LOG_COM_UART_TX_PIN, BBOP_LOG_COM_UART_RX_PIN)
     , m_Ts(static_cast<float>(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US) * 1.0e-6f)
 {
-    // Start SPI communication; guard failure
+    // Optional: SPI starten, falls du es im restlichen Projekt brauchst
     if (!m_SpiSlaveDMA.start()) {
         printf("SPI start() failed — check wiring, pin mapping, or DMA state.\n");
-        return;
+        // Für reinen Servo-Test könnte man hier auch trotzdem weitermachen
+    } else {
+        m_spi_ready = true;
+        printf("SPI Communication started. Waiting for master...\n");
     }
 
-    m_spi_ready = true;
-    printf("SPI Communication started. Waiting for master...\n");
-
-    // Calibrate and enable servos (normalised pulse widths)
+    // Servo calibration
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
 
+    // Servos auf Mittelstellung aktivieren
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable();
+        m_servoD0.enable(0.387f);
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable();
+        m_servoD1.enable(0.370f);
     }
     if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable();
+        m_servoD2.enable(0.382f);
     }
+
+    m_servo_commands[0] = 0.387f;
+    m_servo_commands[1] = 0.370f;
+    m_servo_commands[2] = 0.382f;
 
     m_Timer.start();
 
-    // NOTE: RealTimeThread::enable() must be called by the user after construction is complete
+    printf("SPIComCntrl test mode initialized.\n");
 }
 
 SPIComCntrl::~SPIComCntrl() = default;
 
+
+// Global / file-local IK object like in your style
+InverseKinematics3Leg ik;
+InverseKinematics3Leg::Input ikInput;
+
 void SPIComCntrl::executeTask()
 {
-    // Return early if SPI not ready
-    if (!m_spi_ready) {
-        return;
-    }
+    // ============================================================
+    // TEST MODE:
+    // Fixed platform pose -> IK -> Servo commands
+    // No ball controller, no trajectory, no vision needed
+    // ============================================================
 
-    // Measure delta time
-    const microseconds time_us = m_Timer.elapsed_time();
-    const float dtime_us = duration_cast<microseconds>(time_us - m_time_previous_us).count();
-    m_time_previous_us = time_us;
+    // Example test pose
+    ikInput.roll  = DegreeToRad(0.0f);    // [rad]
+    ikInput.pitch = DegreeToRad(0.0f);    // [rad]
+    ikInput.h     = 110.5f;               // [mm]
 
-    // Read IMU data
-    m_ImuData = m_Imu.getImuData();
-    if (!m_Imu.isCalibrated())
-        return;
+    // Example alternative test cases:
+    // ikInput.roll  = DegreeToRad(5.0f);
+    // ikInput.pitch = DegreeToRad(0.0f);
+    // ikInput.h     = 110.5f;
 
-    // Check for new SPI data from master
-    if (m_SpiSlaveDMA.hasNewData()) {
-        m_spiData = m_SpiSlaveDMA.getSPIData();
+    // ikInput.roll  = DegreeToRad(0.0f);
+    // ikInput.pitch = DegreeToRad(5.0f);
+    // ikInput.h     = 110.5f;
 
-        // // When logging via SerialStream you have to uncomment this print
-        // printf("Message: %lu | Delta Time: %lu us | "
-        //        "Received: [%.2f, %.2f, %.2f] | "
-        //        "Header: 0x%02X | Failed: %lu | "
-        //        "Readout Time: %lu us\n",
-        //        m_spiData.message_count,
-        //        m_spiData.last_delta_time_us,
-        //        m_spiData.data[0],
-        //        m_spiData.data[1],
-        //        m_spiData.data[2],
-        //        SPI_HEADER_SLAVE,
-        //        m_spiData.failed_count,
-        //        m_spiData.readout_time_us);
+    InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
 
-        // Update servo commands from SPI payload (first three floats expected in [0,1])
-        m_servo_commands[0] = clamp01(m_spiData.data[0]);
-        m_servo_commands[1] = clamp01(m_spiData.data[1]);
-        m_servo_commands[2] = clamp01(m_spiData.data[2]);
+    if (!ikResult.success) {
+        printf("IK computation failed: %s\n", ikResult.errorMessage.c_str());
+
+        // Safe fallback: hold center position
+        m_servo_commands[0] = 0.387f;
+        m_servo_commands[1] = 0.370f;
+        m_servo_commands[2] = 0.382f;
+
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
         m_servoD2.setPulseWidth(m_servo_commands[2]);
+        return;
     }
 
-    // Prepare next reply
-    m_reply_data[0] = m_servo_commands[0]; // Echo servo D0 command
-    m_reply_data[1] = m_servo_commands[1]; // Echo servo D1 command
-    m_reply_data[2] = m_servo_commands[2]; // Echo servo D2 command
-    m_reply_data[3] = m_ImuData.gyro.x();  // Gyro X in rad/sec
-    m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
-    m_reply_data[5] = m_ImuData.gyro.z();  // Gyro Z in rad/sec
-    m_reply_data[6] = m_ImuData.acc.x();   // Acc X in m/sec^2
-    m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
-    m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
-    m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
+    printf("IK successful | alphaDeg: [%.2f, %.2f, %.2f] | rodError: [%.2f, %.2f, %.2f]\n",
+           ikResult.alphaDeg[0], ikResult.alphaDeg[1], ikResult.alphaDeg[2],
+           ikResult.rodError[0], ikResult.rodError[1], ikResult.rodError[2]);
 
-    // Send data over serial stream
-    if (m_SerialStream.startByteReceived()) {
-        m_SerialStream.write(dtime_us);            //  0 Delta time in us
-        m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
-        m_SerialStream.write(m_servo_commands[1]); //  2 Echo servo D1 command
-        m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
-        m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
-        m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
-        m_SerialStream.write(m_ImuData.gyro.z());  //  6 Gyro Z in rad/sec
-        m_SerialStream.write(m_ImuData.acc.x());   //  7 Acc X in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.y());   //  8 Acc Y in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.z());   //  9 Acc Z in m/sec^2
-        m_SerialStream.write(m_ImuData.rpy.x());   // 10 Roll in rad
-        m_SerialStream.write(m_ImuData.rpy.y());   // 11 Pitch in rad
-        m_SerialStream.write(m_ImuData.rpy.z());   // 12 Yaw in rad
-        m_SerialStream.send();
-    }
+    // ------------------------------------------------------------
+    // IMPORTANT:
+    // Here we assume that alpha = 90 deg corresponds roughly to the
+    // mechanical neutral pose (servo horn horizontal outward).
+    // That is why we subtract 90 deg.
+    //
+    // If your real neutral pose is different, change this offset.
+    // ------------------------------------------------------------
+    float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - 90.0f);
+    float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - 90.0f);
+    float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - 90.0f);
+
+    // Clamp to allowed range around each servo center
+    m_servo_commands[0] = clamp(0.387f + control_output_1, 0.357f, 0.417f);
+    m_servo_commands[1] = clamp(0.370f + control_output_2, 0.340f, 0.400f);
+    m_servo_commands[2] = clamp(0.382f + control_output_3, 0.352f, 0.412f);
+
+    printf("Servo Commands (PWM): D0: %.3f | D1: %.3f | D2: %.3f\n",
+           m_servo_commands[0],
+           m_servo_commands[1],
+           m_servo_commands[2]);
+
+    // Send commands to servos
+    m_servoD0.setPulseWidth(m_servo_commands[0]);
+    m_servoD1.setPulseWidth(m_servo_commands[1]);
+    m_servoD2.setPulseWidth(m_servo_commands[2]);
 }
 
 float SPIComCntrl::clamp(float val, float min, float max)
@@ -130,4 +136,22 @@ float SPIComCntrl::clamp(float val, float min, float max)
     if (val > max)
         return max;
     return val;
+}
+
+float SPIComCntrl::DegreeToPWM(float degree)
+{
+    float pulse_width = (degree / BBOP_SERVO_angle_range_grad);
+    return pulse_width;
+}
+
+float SPIComCntrl::PWMToDegree(float pulse_width)
+{
+    float degree = pulse_width * BBOP_SERVO_angle_range_grad;
+    return degree;
+}
+
+float SPIComCntrl::DegreeToRad(float degree)
+{
+    float rad = degree * (M_PIf / 180.0f);
+    return rad;
 }

@@ -44,7 +44,12 @@ private:
     bool m_spi_ready{false};
 
     void executeTask() override;
+    
     static float clamp(float val, float min, float max);
     static float clamp01(float val) { return clamp(val, 0.0f, 1.0f); }
+
+    static float DegreeToPWM(float degree);
+    static float PWMToDegree(float pulse_width);
+    static float DegreeToRad(float degree);
 };
 #endif /* SPI_COM_CNTRL_H_ */
