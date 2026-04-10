@@ -36,13 +36,13 @@ SPIComCntrl::SPIComCntrl()
     
     // Servos auf Mittelstellung aktivieren
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(servo_center);
+        m_servoD0.enable(servo_center+6.5f);
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(servo_center);
+        m_servoD1.enable(servo_center+8.5f);
     }
     if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable(servo_center);
+        m_servoD2.enable(servo_center+0.0f);
     }
 
     m_servo_commands[0] = servo_center;
@@ -89,9 +89,9 @@ void SPIComCntrl::executeTask()
         printf("IK computation failed: %s\n", ikResult.errorMessage.c_str());
         float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
         // Safe fallback: hold center position
-        m_servo_commands[0] = servo_center;
-        m_servo_commands[1] = servo_center;
-        m_servo_commands[2] = servo_center;
+        m_servo_commands[0] = servo_center+6.5f;
+        m_servo_commands[1] = servo_center+8.5f;
+        m_servo_commands[2] = servo_center+0.0f;
 
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
@@ -111,9 +111,9 @@ void SPIComCntrl::executeTask()
     //
     // If your real neutral pose is different, change this offset.
     // ------------------------------------------------------------
-    float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - 90.0f);
-    float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - 90.0f);
-    float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - 90.0f);
+    float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - (90.0f-6.5f)); // D0 hat Offset von +6.5 Grad
+    float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - (90.0f-8.5f)); // D1 hat Offset von +8.5 Grad
+    float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - (90.0f-0.0f)); // D2 hat Offset von +0.0 Grad
 
     float delta20 = DegreeToPWM(20.0f);
     float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
