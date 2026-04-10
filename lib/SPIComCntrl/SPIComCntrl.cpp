@@ -39,12 +39,12 @@ SPIComCntrl::SPIComCntrl()
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-    
+
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(DegreeToPWM(90.0f));
+        m_servoD0.enable(DegreeToPWM(90.0f+6.5f));
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(DegreeToPWM(90.0f));
+        m_servoD1.enable(DegreeToPWM(90.0f+8.5f));
     }
     if (!m_servoD2.isEnabled()) {
         m_servoD2.enable(DegreeToPWM(90.0f));
@@ -177,9 +177,9 @@ void SPIComCntrl::executeTask()
             
             constexpr float SERVO_NEUTRAL_DEG = 90.0f; // Neutralstellung der Servos in Grad (Servohorn zeigt nach aussen)
 
-            float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - SERVO_NEUTRAL_DEG);
-            float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - SERVO_NEUTRAL_DEG);
-            float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - SERVO_NEUTRAL_DEG);
+            float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - (SERVO_NEUTRAL_DEG+6.5f));
+            float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - (SERVO_NEUTRAL_DEG+8.5f));
+            float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - (SERVO_NEUTRAL_DEG+0.0f));
             
             // Servo-Mitte und Begrenzung definieren
             float SERVO_CENTER = DegreeToPWM(SERVO_NEUTRAL_DEG);
@@ -192,8 +192,8 @@ void SPIComCntrl::executeTask()
 
         } else {
             // Ball weg, Servos in Mittelstellung halten
-            m_servo_commands[0] = DegreeToPWM(90.0f);
-            m_servo_commands[1] = DegreeToPWM(90.0f);
+            m_servo_commands[0] = DegreeToPWM(90.0f+6.5f);
+            m_servo_commands[1] = DegreeToPWM(90.0f+8.5f);
             m_servo_commands[2] = DegreeToPWM(90.0f);
         }
 
