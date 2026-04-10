@@ -18,8 +18,8 @@ public:
     virtual ~SPIComCntrl();
 
 private:
-    static constexpr float SERVO_PULSE_MIN = 0.0325f;
-    static constexpr float SERVO_PULSE_MAX = 0.1175f;
+    static constexpr float SERVO_PULSE_MIN = 0.2125f;
+    static constexpr float SERVO_PULSE_MAX = 0.5375f;
 
     SpiData m_spiData;
     SpiSlaveDMA m_SpiSlaveDMA;

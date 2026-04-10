@@ -31,21 +31,23 @@ SPIComCntrl::SPIComCntrl()
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-
+    
+    float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
+    
     // Servos auf Mittelstellung aktivieren
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(0.387f);
+        m_servoD0.enable(servo_center);
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(0.370f);
+        m_servoD1.enable(servo_center);
     }
     if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable(0.382f);
+        m_servoD2.enable(servo_center);
     }
 
-    m_servo_commands[0] = 0.387f;
-    m_servo_commands[1] = 0.370f;
-    m_servo_commands[2] = 0.382f;
+    m_servo_commands[0] = servo_center;
+    m_servo_commands[1] = servo_center;
+    m_servo_commands[2] = servo_center;
 
     m_Timer.start();
 
@@ -70,7 +72,7 @@ void SPIComCntrl::executeTask()
     // Example test pose
     ikInput.roll  = DegreeToRad(0.0f);      // [rad]
     ikInput.pitch = DegreeToRad(0.0f);    // [rad]
-    ikInput.h     = 70.0f;                  // [mm]
+    ikInput.h     = 98.0f;                  // [mm]
 
     // Example alternative test cases:
     // ikInput.roll  = DegreeToRad(5.0f);
@@ -85,11 +87,11 @@ void SPIComCntrl::executeTask()
 
     if (!ikResult.success) {
         printf("IK computation failed: %s\n", ikResult.errorMessage.c_str());
-
+        float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
         // Safe fallback: hold center position
-        m_servo_commands[0] = 0.387f;
-        m_servo_commands[1] = 0.370f;
-        m_servo_commands[2] = 0.382f;
+        m_servo_commands[0] = servo_center;
+        m_servo_commands[1] = servo_center;
+        m_servo_commands[2] = servo_center;
 
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
@@ -114,10 +116,10 @@ void SPIComCntrl::executeTask()
     float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - 90.0f);
 
     float delta20 = DegreeToPWM(20.0f);
-
-    m_servo_commands[0] = clamp(0.387f + control_output_1, 0.387f - delta20, 0.387f + delta20);
-    m_servo_commands[1] = clamp(0.370f + control_output_2, 0.370f - delta20, 0.370f + delta20);
-    m_servo_commands[2] = clamp(0.382f + control_output_3, 0.382f - delta20, 0.382f + delta20);
+    float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
+    m_servo_commands[0] = clamp(servo_center + control_output_1, servo_center - delta20, servo_center + delta20);
+    m_servo_commands[1] = clamp(servo_center + control_output_2, servo_center - delta20, servo_center + delta20);
+    m_servo_commands[2] = clamp(servo_center + control_output_3, servo_center - delta20, servo_center + delta20);
 
     printf("Servo Commands (PWM): D0: %.3f | D1: %.3f | D2: %.3f\n",
            m_servo_commands[0],

@@ -27,7 +27,7 @@
 #define BBOP_SERVO_D0_PIN PB_2
 #define BBOP_SERVO_D1_PIN PC_8
 #define BBOP_SERVO_D2_PIN PC_6
-#define BBOP_SERVO_PWM_PERIOD_US 20000
+#define BBOP_SERVO_PWM_PERIOD_US 2000
 
 // SPI Communication and Control Thread
 #define BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US 1000
@@ -38,6 +38,6 @@
 #define BBOP_LOG_COM_UART_TX_PIN PA_9
 #define BBOP_LOG_COM_UART_RX_PIN PA_10
 
-#define BBOP_SERVO_angle_range_grad 110.0f
+#define BBOP_SERVO_angle_range_grad 122.7f
 
 #endif /* BBOP_CONFIG_H_ */
