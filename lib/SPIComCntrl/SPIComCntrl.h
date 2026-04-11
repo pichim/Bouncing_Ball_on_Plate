@@ -20,9 +20,6 @@ public:
     virtual ~SPIComCntrl();
 
 private:
-    // MKS
-    // static constexpr float SERVO_PULSE_MIN = 0.214f;
-    // static constexpr float SERVO_PULSE_MAX = 0.536f;
     // MKS HBL669
     float SERVO_PULSE_MIN = 0.2125f;
     float SERVO_PULSE_MAX = 0.5375f;
@@ -38,7 +35,6 @@ private:
 
     static constexpr float BALL_CTRL_KP = 0.0579f; //0.2f;
     static constexpr float BALL_CTRL_KI = 0.0008f;
-    static constexpr float BALL_CTRL_TAU_D_S = 0.0796f; //0.0413f * 1.0f;
     static constexpr float BALL_CTRL_TAU_V = 4.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
     static constexpr float BALL_CTRL_TAU_f = 0.2217f * 1.0f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
     static constexpr float BALL_CTRL_TAU_R_O = 0.1314f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;

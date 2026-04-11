@@ -26,7 +26,7 @@ public:
     {
         float roll  = 0.0;   // [rad]
         float pitch = 0.0;   // [rad]
-        float h     = 98.0; // [same length unit as geometry]
+        float h     = 98.1; // [same length unit as geometry]
     };
 
     struct Result
