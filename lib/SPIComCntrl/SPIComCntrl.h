@@ -25,7 +25,8 @@ private:
     float SERVO_PULSE_MAX = 0.5375f;
     static constexpr float BALL_POS_CENTER_PX = 0.0f;
     static constexpr float ANGLE_DELTA_LIMIT_GRAD = 20.0f;
-    // Michis Reglerwerte
+    
+    // // Michis Reglerwerte
     // static constexpr float BALL_CTRL_KP = 0.1f; //0.2f;
     // static constexpr float BALL_CTRL_KI = 0.0f;
     // static constexpr float BALL_CTRL_TAU_D_S = 0.0796f; //0.0413f * 1.0f;
@@ -33,13 +34,23 @@ private:
     // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (0.4157f - 0.0413f);
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
+    // // Ximus Reglerwerte
+    // static constexpr float BALL_CTRL_KP = 0.22061;
+    // static constexpr float BALL_CTRL_KI = 0.0f;
+    // static constexpr float BALL_CTRL_TAU_V = 1.3215f; //0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
+    // static constexpr float BALL_CTRL_TAU_f = 0.1314; //0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
+    // static constexpr float BALL_CTRL_TAU_R_O = 0.0398f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
+    // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
+    // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+
     static constexpr float BALL_CTRL_KP = 0.0579f; //0.2f;
-    static constexpr float BALL_CTRL_KI = 0.0008f;
+    static constexpr float BALL_CTRL_KI = 0.0f;
     static constexpr float BALL_CTRL_TAU_V = 4.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
     static constexpr float BALL_CTRL_TAU_f = 0.2217f * 1.0f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
     static constexpr float BALL_CTRL_TAU_R_O = 0.1314f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+    
     static constexpr float PI = 3.14159265358979323846f;
 
     float cos_theta_rotation;

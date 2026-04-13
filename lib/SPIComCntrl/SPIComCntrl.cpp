@@ -47,8 +47,8 @@ SPIComCntrl::SPIComCntrl()
     // m_ballPosCntrl = PIDCntrl(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
     // m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
     // m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
-    m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
-    m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
 
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
@@ -104,7 +104,7 @@ void SPIComCntrl::executeTask()
 
     // // Kreis Trajektorie mit 50mm Radius und 0.1 Hz Frequenz
     // float f = 0.1f;      // Hz
-    // float R = 50.0f;     // mm
+    // float R = 30.0f;     // mm
     // float xd = R * std::cos(2.0f * PI * f * t_s);
     // float yd = R * std::sin(2.0f * PI * f * t_s);
 
@@ -129,7 +129,7 @@ void SPIComCntrl::executeTask()
 
 
         // NEU: Wenn der Ball gerade eben erst wieder aufgetaucht ist (nach mindestens 1 Frame Pause)
-        if (missing_data_counter > 0) { 
+        if ((missing_data_counter * m_Ts) > VISION_TIMEOUT) { 
             // Wir setzen den Regler auf den AKTUELLEN Fehlerwert, 
             // damit delta_error im nächsten Schritt 0 ist.
 
@@ -162,7 +162,7 @@ void SPIComCntrl::executeTask()
     }
 
 
-    if (m_Imu.isCalibrated() || !m_Imu.isCalibrated()) {
+    if (m_Imu.isCalibrated()) {
         
         if ((missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
             
