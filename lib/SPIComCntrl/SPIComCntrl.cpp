@@ -97,8 +97,8 @@ void SPIComCntrl::executeTask()
     float yd = 0.0f;
 
     // // Kreis Trajektorie mit 50mm Radius und 0.1 Hz Frequenz
-    // float f = 0.1f;      // Hz
-    // float R = 30.0f;     // mm
+    // float f = 0.2f;      // Hz
+    // float R = 35.0f;     // mm
     // float xd = R * std::cos(2.0f * PI * f * t_s);
     // float yd = R * std::sin(2.0f * PI * f * t_s);
 
