@@ -44,9 +44,6 @@ SPIComCntrl::SPIComCntrl()
     printf("SPI Communication started. Waiting for master...\n");
 
     //create PID-T1 controller
-    // m_ballPosCntrl = PIDCntrl(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
-    // m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
-    // m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
     m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
     m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
 
@@ -79,9 +76,6 @@ SPIComCntrl::SPIComCntrl()
 }
 
 SPIComCntrl::~SPIComCntrl() = default;
-
-InverseKinematics3Leg ik;
-InverseKinematics3Leg::Input ikInput;
 
 void SPIComCntrl::executeTask()
 {
@@ -179,40 +173,49 @@ void SPIComCntrl::executeTask()
             float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
 
             // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
-            ikInput.pitch = -DegreeToRad(rotated_output_x);
-            ikInput.roll = DegreeToRad(rotated_output_y);
-            ikInput.h = 98.1f;
-            
-            // Inverse Kinematik berechnen
-            InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
-            
-            // Servo commands in Grad berechnen
-            float servo1_cmd_deg = SERVO1_HOME_DEG + (ikResult.alphaDeg[0] - IK_HOME_DEG);
-            float servo2_cmd_deg = SERVO2_HOME_DEG + (ikResult.alphaDeg[1] - IK_HOME_DEG);
-            float servo3_cmd_deg = SERVO3_HOME_DEG + (ikResult.alphaDeg[2] - IK_HOME_DEG);
+            m_ikInput.pitch = -DegreeToRad(rotated_output_x);
+            m_ikInput.roll  =  DegreeToRad(rotated_output_y);
+            m_ikInput.h     = 98.1f;
 
-            // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
-            servo1_cmd_deg = clamp(servo1_cmd_deg,
-                                   SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                   SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+            InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 
-            servo2_cmd_deg = clamp(servo2_cmd_deg,
-                                   SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                   SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+            // WICHTIG: IK-Ergebnis prüfen, bevor alphaDeg verwendet wird
+            if (ikResult.success) {
 
-            servo3_cmd_deg = clamp(servo3_cmd_deg,
-                                   SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                   SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                // Servo commands in Grad berechnen
+                float servo1_cmd_deg = SERVO1_HOME_DEG + (ikResult.alphaDeg[0] - IK_HOME_DEG);
+                float servo2_cmd_deg = SERVO2_HOME_DEG + (ikResult.alphaDeg[1] - IK_HOME_DEG);
+                float servo3_cmd_deg = SERVO3_HOME_DEG + (ikResult.alphaDeg[2] - IK_HOME_DEG);
 
-            // Zusätzlicher harter Sicherheitsclamp auf den realen Servobereich
-            servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
-            servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
-            servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+                // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
+                servo1_cmd_deg = clamp(servo1_cmd_deg,
+                                       SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                                       SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
-            // Erst ganz am Schluss in normierten Servo-Befehl umrechnen
-            m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg);
-            m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg);
-            m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg);
+                servo2_cmd_deg = clamp(servo2_cmd_deg,
+                                       SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                                       SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+                servo3_cmd_deg = clamp(servo3_cmd_deg,
+                                       SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                                       SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+                // Zusätzlicher harter Sicherheitsclamp auf den realen Servobereich
+                servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+                servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+                servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+
+                // Erst ganz am Schluss in normierten Servo-Befehl umrechnen
+                m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg);
+                m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg);
+                m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg);
+
+            } else {
+                // Falls IK fehlschlägt: sicher auf Home-Lage zurück
+                m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
+                m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
+                m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
+            }
 
         } else {
 
@@ -220,14 +223,12 @@ void SPIComCntrl::executeTask()
             m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
             m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
             m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
-
         }
 
         // Servo ansteuern
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
         m_servoD2.setPulseWidth(m_servo_commands[2]);
-
     }
 
     // Prepare next reply

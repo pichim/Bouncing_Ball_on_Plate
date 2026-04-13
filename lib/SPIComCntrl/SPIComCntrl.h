@@ -37,12 +37,13 @@ private:
     // // Ximus Reglerwerte
     // static constexpr float BALL_CTRL_KP = 0.22061;
     // static constexpr float BALL_CTRL_KI = 0.0f;
-    // static constexpr float BALL_CTRL_TAU_V = 1.3215f; //0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
-    // static constexpr float BALL_CTRL_TAU_f = 0.1314; //0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
-    // static constexpr float BALL_CTRL_TAU_R_O = 0.0398f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
+    // static constexpr float BALL_CTRL_TAU_V = 2.1519f; 
+    // static constexpr float BALL_CTRL_TAU_f = 0.1162f;  
+    // static constexpr float BALL_CTRL_TAU_R_O = 0.039789f * 5.0f;
     // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
+    // Luca Reglerwerte
     static constexpr float BALL_CTRL_KP = 0.0579f; //0.2f;
     static constexpr float BALL_CTRL_KI = 0.0f;
     static constexpr float BALL_CTRL_TAU_V = 4.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
@@ -71,6 +72,9 @@ private:
     SerialStream m_SerialStream;
     Timer m_Timer;
     microseconds m_time_previous_us{0};
+
+    InverseKinematics3Leg m_ik;
+    InverseKinematics3Leg::Input m_ikInput;
 
     float m_Ts;
     PIDCntrl m_ballPosCntrl_x;
