@@ -15,6 +15,13 @@ namespace
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f; 
+
+    // Ballmodell: x_ddot = (3g/5) * theta
+    constexpr float G_MM_S2 = 9810.0f;                    // mm/s^2
+    constexpr float BALL_ACC_PER_RAD = (3.0f * G_MM_S2) / 5.0f;
+
+    // Zum vorsichtigen Aktivieren: zuerst kleiner als 1 testen
+    constexpr float TRAJ_FF_GAIN = 0.45f;
 }
 
 SPIComCntrl::SPIComCntrl()
@@ -92,15 +99,30 @@ void SPIComCntrl::executeTask()
     // Trajektorie einmal pro Zyklus berechnen
     float t_s = duration_cast<microseconds>(time_us).count() * 1.0e-6f;
 
-    // Konstante Soll-Position
-    float xd = 0.0f;
-    float yd = 0.0f;
+    // // Standard: Konstante Soll-Position
+    // float xd = 0.0f;
+    // float yd = 0.0f;
 
-    // // Kreis Trajektorie mit 50mm Radius und 0.1 Hz Frequenz
-    // float f = 0.2f;      // Hz
-    // float R = 35.0f;     // mm
-    // float xd = R * std::cos(2.0f * PI * f * t_s);
-    // float yd = R * std::sin(2.0f * PI * f * t_s);
+    // float xd_ddot = 0.0f;
+    // float yd_ddot = 0.0f;
+
+    // Kreis Trajektorie mit 35mm Radius und 0.2 Hz Frequenz
+    // Parameter für Kreisbahn
+    float f = 0.2f;      // Hz
+    float R = 35.0f;     // mm
+    float w = 2.0f * PI * f;
+
+    // Berechnung der Soll-Position auf der Kreisbahn
+    float xd = R * std::cos(2.0f * PI * f * t_s);
+    float yd = R * std::sin(2.0f * PI * f * t_s);
+    
+    // Berechnung der Soll-Geschwindigkeit
+    float xd_dot  = -R * w * std::sin(w * t_s);
+    float yd_dot  =  R * w * std::cos(w * t_s);
+
+    // Berechnung der Soll-Beschleunigung
+    float xd_ddot = -R * w * w * std::cos(w * t_s);
+    float yd_ddot = -R * w * w * std::sin(w * t_s);
 
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
@@ -164,9 +186,19 @@ void SPIComCntrl::executeTask()
             float error_x = xd - m_spiData.data[0]; //input in mm
             float error_y = yd - m_spiData.data[1]; //input in mm
 
-            // Update Control output (PID) to get servo commands
-            float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
-            float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
+            float control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x);
+            float control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y);
+
+            // Feedforward aus Soll-Beschleunigung
+            float theta_ff_x_rad = xd_ddot / BALL_ACC_PER_RAD;
+            float theta_ff_y_rad = yd_ddot / BALL_ACC_PER_RAD;
+
+            float theta_ff_x_grad = TRAJ_FF_GAIN * (theta_ff_x_rad * 180.0f / M_PIf);
+            float theta_ff_y_grad = TRAJ_FF_GAIN * (theta_ff_y_rad * 180.0f / M_PIf);
+
+            // Gesamt-Stellgröße
+            float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
+            float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
 
             // rotate control outputs
             float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;

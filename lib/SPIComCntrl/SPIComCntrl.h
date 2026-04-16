@@ -53,10 +53,10 @@ private:
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
     static constexpr float BALL_CTRL_KP = 0.08f; 
-    static constexpr float BALL_CTRL_KI = 0.0f;
+    static constexpr float BALL_CTRL_KI = 0.001f;
     static constexpr float BALL_CTRL_TAU_V = 6.0f;
-    static constexpr float BALL_CTRL_TAU_f = 0.25f * 1.5f;   
-    static constexpr float BALL_CTRL_TAU_R_O = 0.03f * 5.0f;
+    static constexpr float BALL_CTRL_TAU_f = 0.2627f * 1.5f;   
+    static constexpr float BALL_CTRL_TAU_R_O = 0.0318f * 5.0f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
     
