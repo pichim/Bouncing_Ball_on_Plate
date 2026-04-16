@@ -205,9 +205,9 @@ void SPIComCntrl::executeTask()
             float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
 
             // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
-            m_ikInput.pitch = -DegreeToRad(rotated_output_x);
-            m_ikInput.roll  =  DegreeToRad(rotated_output_y);
-            m_ikInput.h     = 98.1f + 20.0f;
+            m_ikInput.pitch = DegreeToRad(rotated_output_x);
+            m_ikInput.roll  = -DegreeToRad(rotated_output_y);
+            m_ikInput.h     = 98.1f - 20.0f;
 
             InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 
