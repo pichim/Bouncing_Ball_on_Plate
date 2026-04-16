@@ -111,9 +111,9 @@ void SPIComCntrl::executeTask()
     // If your real neutral pose is different, change this offset.
     // ------------------------------------------------------------
     // Servo commands in Grad berechnen
-    float servo1_cmd_deg = SERVO1_HOME_DEG + (ikResult.alphaDeg[0] - IK_HOME_DEG);
-    float servo2_cmd_deg = SERVO2_HOME_DEG + (ikResult.alphaDeg[1] - IK_HOME_DEG);
-    float servo3_cmd_deg = SERVO3_HOME_DEG + (ikResult.alphaDeg[2] - IK_HOME_DEG);
+    float servo1_cmd_deg = SERVO1_HOME_DEG - (ikResult.alphaDeg[0] - IK_HOME_DEG);
+    float servo2_cmd_deg = SERVO2_HOME_DEG - (ikResult.alphaDeg[1] - IK_HOME_DEG);
+    float servo3_cmd_deg = SERVO3_HOME_DEG - (ikResult.alphaDeg[2] - IK_HOME_DEG);
 
     // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
     servo1_cmd_deg = clamp(servo1_cmd_deg,
