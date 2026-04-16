@@ -1,6 +1,22 @@
 #include "SPIComCntrl.h"
 #include "InverseKinematics3Leg.h"
 
+// Servo & Inverse Kinematics mapping constants
+namespace
+{
+    constexpr float IK_HOME_DEG = 90.0f;    // aus IK: roll=0, pitch=0, h=98.1
+    constexpr float SERVO_MAX_DEG = 122.7f; // real nutzbarer Servobereich
+    constexpr float SERVO_MIN_DEG = 0.0f;
+
+    // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
+    constexpr float SERVO1_HOME_DEG = 90.0f + 6.5f; // 96.5°
+    constexpr float SERVO2_HOME_DEG = 90.0f + 8.5f; // 98.5°
+    constexpr float SERVO3_HOME_DEG = 90.0f + 0.0f; // 90.0°
+
+    // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
+    constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f; 
+}
+
 SPIComCntrl::SPIComCntrl()
     : RealTimeThread(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US,
                      BBOP_SPI_COM_CNTRL_THREAD_PRIORITY,
@@ -32,23 +48,16 @@ SPIComCntrl::SPIComCntrl()
     m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     
-    float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
-    
     // Servos auf Mittelstellung aktivieren
-    if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(servo_center+6.5f);
-    }
-    if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(servo_center+8.5f);
-    }
-    if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable(servo_center+0.0f);
-    }
+    m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG));
+    m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG));
+    m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG));
 
-    m_servo_commands[0] = servo_center;
-    m_servo_commands[1] = servo_center;
-    m_servo_commands[2] = servo_center;
-
+    // Initiale Befehle auf Home-Position setzen
+    m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
+    m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
+    m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
+    
     m_Timer.start();
 
     printf("SPIComCntrl test mode initialized.\n");
@@ -70,28 +79,18 @@ void SPIComCntrl::executeTask()
     // ============================================================
 
     // Example test pose
-    ikInput.roll  = DegreeToRad(0.0f);      // [rad]
+    ikInput.roll  = DegreeToRad(0.0f);    // [rad]
     ikInput.pitch = DegreeToRad(0.0f);    // [rad]
-    ikInput.h     = 98.0f;                  // [mm]
-
-    // Example alternative test cases:
-    // ikInput.roll  = DegreeToRad(5.0f);
-    // ikInput.pitch = DegreeToRad(0.0f);
-    // ikInput.h     = 98.1f;
-
-    // ikInput.roll  = DegreeToRad(0.0f);
-    // ikInput.pitch = DegreeToRad(5.0f);
-    // ikInput.h     = 98.1f;
+    ikInput.h     = 98.1f;                // [mm]
 
     InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
 
     if (!ikResult.success) {
-        printf("IK computation failed: %s\n", ikResult.errorMessage.c_str());
-        float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
-        // Safe fallback: hold center position
-        m_servo_commands[0] = servo_center+6.5f;
-        m_servo_commands[1] = servo_center+8.5f;
-        m_servo_commands[2] = servo_center+0.0f;
+
+        // Safe fallback: hold home positions
+        m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
+        m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
+        m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
 
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
@@ -111,22 +110,35 @@ void SPIComCntrl::executeTask()
     //
     // If your real neutral pose is different, change this offset.
     // ------------------------------------------------------------
-    float control_output_1 = DegreeToPWM(ikResult.alphaDeg[0] - (90.0f-6.5f)); // D0 hat Offset von +6.5 Grad
-    float control_output_2 = DegreeToPWM(ikResult.alphaDeg[1] - (90.0f-8.5f)); // D1 hat Offset von +8.5 Grad
-    float control_output_3 = DegreeToPWM(ikResult.alphaDeg[2] - (90.0f-0.0f)); // D2 hat Offset von +0.0 Grad
+    // Servo commands in Grad berechnen
+    float servo1_cmd_deg = SERVO1_HOME_DEG + (ikResult.alphaDeg[0] - IK_HOME_DEG);
+    float servo2_cmd_deg = SERVO2_HOME_DEG + (ikResult.alphaDeg[1] - IK_HOME_DEG);
+    float servo3_cmd_deg = SERVO3_HOME_DEG + (ikResult.alphaDeg[2] - IK_HOME_DEG);
 
-    float delta20 = DegreeToPWM(20.0f);
-    float servo_center = DegreeToPWM(90.0f); // Mittelstellung bei 0 Grad
-    m_servo_commands[0] = clamp(servo_center + control_output_1, servo_center - delta20, servo_center + delta20);
-    m_servo_commands[1] = clamp(servo_center + control_output_2, servo_center - delta20, servo_center + delta20);
-    m_servo_commands[2] = clamp(servo_center + control_output_3, servo_center - delta20, servo_center + delta20);
+    // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
+    servo1_cmd_deg = clamp(servo1_cmd_deg,
+                            SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                            SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
-    printf("Servo Commands (PWM): D0: %.3f | D1: %.3f | D2: %.3f\n",
-           m_servo_commands[0],
-           m_servo_commands[1],
-           m_servo_commands[2]);
+    servo2_cmd_deg = clamp(servo2_cmd_deg,
+                            SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                            SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
-    // Send commands to servos
+    servo3_cmd_deg = clamp(servo3_cmd_deg,
+                                       SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                                       SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+    // Zusätzlicher harter Sicherheitsclamp auf den realen Servobereich
+    servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+
+    // Erst ganz am Schluss in normierten Servo-Befehl umrechnen
+    m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg);
+    m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg);
+    m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg);
+
+    // Servos ansteuern
     m_servoD0.setPulseWidth(m_servo_commands[0]);
     m_servoD1.setPulseWidth(m_servo_commands[1]);
     m_servoD2.setPulseWidth(m_servo_commands[2]);
@@ -143,13 +155,13 @@ float SPIComCntrl::clamp(float val, float min, float max)
 
 float SPIComCntrl::DegreeToPWM(float degree)
 {
-    float pulse_width = (degree / BBOP_SERVO_angle_range_grad);
+    float pulse_width = (degree / SERVO_MAX_DEG);
     return pulse_width;
 }
 
 float SPIComCntrl::PWMToDegree(float pulse_width)
 {
-    float degree = pulse_width * BBOP_SERVO_angle_range_grad;
+    float degree = pulse_width * SERVO_MAX_DEG;
     return degree;
 }
 
