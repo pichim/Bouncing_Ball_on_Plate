@@ -10,8 +10,8 @@ namespace
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
     constexpr float SERVO1_HOME_DEG = 90.0f + 6.5f; // 96.5°
-    constexpr float SERVO2_HOME_DEG = 90.0f + 8.5f; // 98.5°
-    constexpr float SERVO3_HOME_DEG = 90.0f + 0.0f; // 90.0°
+    constexpr float SERVO2_HOME_DEG = 90.0f + 9.0f; // 98.5°
+    constexpr float SERVO3_HOME_DEG = 90.0f - 0.5f; // 90.0°
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f; 
@@ -207,7 +207,7 @@ void SPIComCntrl::executeTask()
             // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
             m_ikInput.pitch = DegreeToRad(rotated_output_x);
             m_ikInput.roll  = -DegreeToRad(rotated_output_y);
-            m_ikInput.h     = 98.1f - 20.0f;
+            m_ikInput.h     = 110.5f;
 
             InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 
