@@ -81,7 +81,7 @@ void SPIComCntrl::executeTask()
     // Example test pose
     ikInput.roll  = DegreeToRad(0.0f);    // [rad]
     ikInput.pitch = DegreeToRad(0.0f);    // [rad]
-    ikInput.h     = 98.1f;                // [mm]
+    ikInput.h     = 110.5f;               // [mm]
 
     InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
 
