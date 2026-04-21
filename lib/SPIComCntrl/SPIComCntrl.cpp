@@ -72,22 +72,38 @@ InverseKinematics3Leg::Input ikInput;
 
 void SPIComCntrl::executeTask()
 {
+    ImuData imuData = m_Imu.getImuData();
+
+    static uint32_t print_cnt = 0;
+    print_cnt++;
+
+    if (print_cnt >= 50) {
+        print_cnt = 0;
+
+        const float roll_deg  = imuData.rpy(0) * 180.0f / M_PIf;
+        const float pitch_deg = imuData.rpy(1) * 180.0f / M_PIf;
+        const float yaw_deg   = imuData.rpy(2) * 180.0f / M_PIf;
+
+        printf("gyro [rad/s] = [%.4f, %.4f, %.4f] | "
+               "acc [m/s^2] = [%.4f, %.4f, %.4f] | "
+               "roll = %.2f deg | pitch = %.2f deg | yaw = %.2f deg\n",
+               imuData.gyro(0), imuData.gyro(1), imuData.gyro(2),
+               imuData.acc(0),  imuData.acc(1),  imuData.acc(2),
+               roll_deg, pitch_deg, yaw_deg);
+    }
+
     // ============================================================
     // TEST MODE:
     // Fixed platform pose -> IK -> Servo commands
-    // No ball controller, no trajectory, no vision needed
     // ============================================================
 
-    // Example test pose
-    ikInput.roll  = DegreeToRad(0.0f);    // [rad]
-    ikInput.pitch = DegreeToRad(0.0f);    // [rad]
-    ikInput.h     = 110.5f;               // [mm]
+    ikInput.roll  = DegreeToRad(0.0f);
+    ikInput.pitch = DegreeToRad(0.0f);
+    ikInput.h     = 110.5f;
 
     InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
 
     if (!ikResult.success) {
-
-        // Safe fallback: hold home positions
         m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
         m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
         m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
@@ -98,47 +114,30 @@ void SPIComCntrl::executeTask()
         return;
     }
 
-    printf("IK successful | alphaDeg: [%.2f, %.2f, %.2f] | rodError: [%.2f, %.2f, %.2f]\n",
-           ikResult.alphaDeg[0], ikResult.alphaDeg[1], ikResult.alphaDeg[2],
-           ikResult.rodError[0], ikResult.rodError[1], ikResult.rodError[2]);
-
-    // ------------------------------------------------------------
-    // IMPORTANT:
-    // Here we assume that alpha = 90 deg corresponds roughly to the
-    // mechanical neutral pose (servo horn horizontal outward).
-    // That is why we subtract 90 deg.
-    //
-    // If your real neutral pose is different, change this offset.
-    // ------------------------------------------------------------
-    // Servo commands in Grad berechnen
     float servo1_cmd_deg = SERVO1_HOME_DEG - (ikResult.alphaDeg[0] - IK_HOME_DEG);
     float servo2_cmd_deg = SERVO2_HOME_DEG - (ikResult.alphaDeg[1] - IK_HOME_DEG);
     float servo3_cmd_deg = SERVO3_HOME_DEG - (ikResult.alphaDeg[2] - IK_HOME_DEG);
 
-    // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
     servo1_cmd_deg = clamp(servo1_cmd_deg,
-                            SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                            SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                           SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                           SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
     servo2_cmd_deg = clamp(servo2_cmd_deg,
-                            SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                            SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                           SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                           SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
     servo3_cmd_deg = clamp(servo3_cmd_deg,
-                                       SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                       SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                           SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                           SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
-    // Zusätzlicher harter Sicherheitsclamp auf den realen Servobereich
     servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
     servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
     servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
 
-    // Erst ganz am Schluss in normierten Servo-Befehl umrechnen
     m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg);
     m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg);
     m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg);
 
-    // Servos ansteuern
     m_servoD0.setPulseWidth(m_servo_commands[0]);
     m_servoD1.setPulseWidth(m_servo_commands[1]);
     m_servoD2.setPulseWidth(m_servo_commands[2]);
