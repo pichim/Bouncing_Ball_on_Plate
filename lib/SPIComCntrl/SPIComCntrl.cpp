@@ -60,10 +60,12 @@ void SPIComCntrl::executeTask()
     const float dtime_us = duration_cast<microseconds>(time_us - m_time_previous_us).count();
     m_time_previous_us = time_us;
 
-    // Read IMU data
+    // // Read IMU data
+    // m_ImuData = m_Imu.getImuData();
+    // if (!m_Imu.isCalibrated())
+    //     return;
+
     m_ImuData = m_Imu.getImuData();
-    if (!m_Imu.isCalibrated())
-        return;
 
     // Check for new SPI data from master
     if (m_SpiSlaveDMA.hasNewData()) {
@@ -106,19 +108,13 @@ void SPIComCntrl::executeTask()
 
     // Send data over serial stream
     if (m_SerialStream.startByteReceived()) {
-        m_SerialStream.write(dtime_us);            //  0 Delta time in us
-        m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
-        m_SerialStream.write(m_servo_commands[1]); //  2 Echo servo D1 command
-        m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
-        m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
-        m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
-        m_SerialStream.write(m_ImuData.gyro.z());  //  6 Gyro Z in rad/sec
-        m_SerialStream.write(m_ImuData.acc.x());   //  7 Acc X in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.y());   //  8 Acc Y in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.z());   //  9 Acc Z in m/sec^2
-        m_SerialStream.write(m_ImuData.rpy.x());   // 10 Roll in rad
-        m_SerialStream.write(m_ImuData.rpy.y());   // 11 Pitch in rad
-        m_SerialStream.write(m_ImuData.rpy.z());   // 12 Yaw in rad
+        m_SerialStream.write(dtime_us);
+        m_SerialStream.write(m_ImuData.gyro.x());
+        m_SerialStream.write(m_ImuData.gyro.y());
+        m_SerialStream.write(m_ImuData.gyro.z());
+        m_SerialStream.write(m_ImuData.acc.x());
+        m_SerialStream.write(m_ImuData.acc.y());
+        m_SerialStream.write(m_ImuData.acc.z());
         m_SerialStream.send();
     }
 }

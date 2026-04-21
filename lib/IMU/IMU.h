@@ -10,36 +10,42 @@
 #include "MPU6500_I2C.h"
 
 #ifndef M_PIf
-    #define M_PIf 3.14159265358979323846f /* pi */
+    #define M_PIf 3.14159265358979323846f
 #endif
 
 class IMU
 {
 public:
-    explicit IMU(PinName pin_sdc, PinName pin_scl);
-    virtual ~IMU() {};
+    explicit IMU(PinName pin_sda, PinName pin_scl);
+    virtual ~IMU() {}
 
     class ImuData
     {
     public:
-        ImuData() { init(); };
-        virtual ~ImuData() {};
+        ImuData() { init(); }
+        virtual ~ImuData() {}
 
         Eigen::Vector3f gyro, acc;
         Eigen::Quaternionf quat;
         Eigen::Vector3f rpy;
         float tilt = 0.0f;
 
-        void init() {
+        void init()
+        {
             gyro.setZero();
             acc.setZero();
             quat.setIdentity();
             rpy.setZero();
-        };
+            tilt = 0.0f;
+        }
     };
 
     ImuData getImuData();
-    bool isCalibrated() const { return m_is_calibrated; };
+
+    // NEW: raw sensor access for offline calibration
+    void getRawData(Eigen::Vector3f& gyro_raw, Eigen::Vector3f& acc_raw);
+
+    bool isCalibrated() const { return m_is_calibrated; }
 
 private:
     I2C m_i2c;
@@ -58,5 +64,4 @@ private:
     Eigen::Vector3f m_acc_offset;
 };
 
-// Convenience alias to use ImuData without qualification
 using ImuData = IMU::ImuData;

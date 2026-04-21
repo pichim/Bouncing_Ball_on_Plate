@@ -19,7 +19,9 @@
 #define BBOP_IMU_NUM_RUNS_SKIP 1000 // dont make this shorter than 1000 milliseconds, the openlager needs 1 second to start up (if used for logging)
 #define BBOP_IMU_NUM_RUNS_FOR_AVERAGE 1000
 #define BBOP_IMU_DO_USE_STATIC_ACC_CALIBRATION true // if this is true then averaged acc gets overwritten by BBOP_IMU_B_ACC
-#define BBOP_IMU_B_ACC {0.0f, 0.0f, 0.0f}
+#define BBOP_IMU_B_ACC {0.0585f, -0.0616f, -0.1592f} // Kalibrationswerte für Beschleunigung in m/s^2, statisch gemessen mit 2g Sensoreinstellung
+#define BBOP_IMU_A_ACC {1.0056f, 1.0052f, 0.9893f} // Kalibrationswerte für Beschleunigung, statisch gemessen mit 2g Sensoreinstellung
+#define BBOP_IMU_GYRO_BIAS {-0.0983f, 0.0913f, 0.0151f} // Kalibrationswerte für Gyroskop in rad/s, statisch gemessen mit 250dps Sensoreinstellung
 #define BBOP_IMU_KP (0.1592f * 2.0f * M_PIf)
 #define BBOP_IMU_KI 0.0f
 
@@ -28,6 +30,7 @@
 #define BBOP_SERVO_D1_PIN PC_8
 #define BBOP_SERVO_D2_PIN PC_6
 #define BBOP_SERVO_PWM_PERIOD_US 20000
+#define BBOP_SERVO_angle_range_grad 122.7f
 
 // SPI Communication and Control Thread
 #define BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US 1000
