@@ -38,7 +38,11 @@
 #define BBOP_SPI_COM_CNTRL_THREAD_STACK_SIZE OS_STACK_SIZE
 
 // UART for logging communication (stream to PC for the fast running threads)
+
 #define BBOP_LOG_COM_UART_TX_PIN PA_9
 #define BBOP_LOG_COM_UART_RX_PIN PA_10
+
+#define BBOP_USER_BUTTON PB_1
+
 
 #endif /* BBOP_CONFIG_H_ */

@@ -10,6 +10,8 @@
 #include "config.h"
 #include "mbed.h"
 #include "InverseKinematics3Leg.h"
+#include "DebounceIn.h"
+#include <cmath>
 
 using namespace std::chrono;
 
@@ -53,21 +55,30 @@ private:
     // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
-    static constexpr float BALL_CTRL_KP = 0.08f; //0.0586f; //0.2f;
-    static constexpr float BALL_CTRL_KI = 0.001f;
-    static constexpr float BALL_CTRL_TAU_V = 6.0f;//2.643f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
-    static constexpr float BALL_CTRL_TAU_f = 0.2627f * 1.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
-    static constexpr float BALL_CTRL_TAU_R_O = 0.0318f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
-    static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
-    static constexpr float VISION_TIMEOUT = 1.0F; // seconds
-
-    // static constexpr float BALL_CTRL_KP = 0.0586f; //0.2f;
-    // static constexpr float BALL_CTRL_KI = 0.0f;
-    // static constexpr float BALL_CTRL_TAU_V = 2.6f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
-    // static constexpr float BALL_CTRL_TAU_f = 0.2627f * 1.0f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
+    // static constexpr float BALL_CTRL_KP = 0.08f; //0.0586f; //0.2f;
+    // static constexpr float BALL_CTRL_KI = 0.001f;
+    // static constexpr float BALL_CTRL_TAU_V = 6.0f;//2.643f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
+    // static constexpr float BALL_CTRL_TAU_f = 0.2627f * 1.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
     // static constexpr float BALL_CTRL_TAU_R_O = 0.0318f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
     // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+
+    // good but still too fast
+    // static constexpr float BALL_CTRL_KP = 0.2383 * 0.5f; //0.2f;
+    // static constexpr float BALL_CTRL_KI = 0.0f;
+    // static constexpr float BALL_CTRL_TAU_V = 4.0f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
+    // static constexpr float BALL_CTRL_TAU_f = 0.1314f * 3.0f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
+    // static constexpr float BALL_CTRL_TAU_R_O = 0.0398f * 3.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
+    // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
+    // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+
+    static constexpr float BALL_CTRL_KP = 0.2383 * 0.3f; //0.2f;
+    static constexpr float BALL_CTRL_KI = 0.0f;
+    static constexpr float BALL_CTRL_TAU_V = 3.0f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
+    static constexpr float BALL_CTRL_TAU_f = 0.1314f * 2.0f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
+    static constexpr float BALL_CTRL_TAU_R_O = 0.0398f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
+    static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
+    static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
     float cos_theta_rotation;
     float sin_theta_rotation;
@@ -92,11 +103,15 @@ private:
     PIDCntrl m_ballPosCntrl_x;
     PIDCntrl m_ballPosCntrl_y;
 
+    //userbutton
+    DebounceIn user_button;
+
     float m_servo_commands[3]{};
 
     float m_reply_data[SPI_NUM_FLOATS];
 
     bool m_spi_ready{false};
+    bool m_executeMain{false};
 
     void executeTask() override;
     static float clamp(float val, float min, float max);
@@ -104,5 +119,8 @@ private:
     static float DegreeToPWM(float degree);
     static float PWMToDegree(float pulse_width);
     static float DegreeToRad(float degree);
+
+private:
+    void toggleExecuteMainFcn();
 };
 #endif /* SPI_COM_CNTRL_H_ */
