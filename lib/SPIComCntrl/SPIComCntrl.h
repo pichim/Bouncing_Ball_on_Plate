@@ -42,7 +42,7 @@ private:
     float m_reply_data[SPI_NUM_FLOATS];
 
     bool m_spi_ready{false};
-
+ 
     void executeTask() override;
     
     static float clamp(float val, float min, float max);

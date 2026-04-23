@@ -1,5 +1,6 @@
 #include "SPIComCntrl.h"
 #include "InverseKinematics3Leg.h"
+#include <chrono>
 
 // Servo & Inverse Kinematics mapping constants
 namespace
@@ -10,12 +11,16 @@ namespace
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
     constexpr float SERVO1_HOME_DEG = 90.0f + 6.5f; // 96.5°
-    constexpr float SERVO2_HOME_DEG = 90.0f + 9.0f; // 98.0°
-    constexpr float SERVO3_HOME_DEG = 90.0f - 0.5f; // 90.5°
+    constexpr float SERVO2_HOME_DEG = 90.0f + 9.0f; // 99.0°
+    constexpr float SERVO3_HOME_DEG = 90.0f - 0.5f; // 89.5°
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
-    constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f; 
+    constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f;
 }
+
+// Global / file-local IK object like in your style
+InverseKinematics3Leg ik;
+InverseKinematics3Leg::Input ikInput;
 
 SPIComCntrl::SPIComCntrl()
     : RealTimeThread(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US,
@@ -36,18 +41,17 @@ SPIComCntrl::SPIComCntrl()
 {
     // Optional: SPI starten, falls du es im restlichen Projekt brauchst
     if (!m_SpiSlaveDMA.start()) {
-        printf("SPI start() failed — check wiring, pin mapping, or DMA state.\n");
-        // Für reinen Servo-Test könnte man hier auch trotzdem weitermachen
+        // printf("SPI start() failed — check wiring, pin mapping, or DMA state.\n");
     } else {
         m_spi_ready = true;
-        printf("SPI Communication started. Waiting for master...\n");
+        // printf("SPI Communication started. Waiting for master...\n");
     }
 
     // Servo calibration
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-    
+
     // Servos auf Mittelstellung aktivieren
     m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG));
     m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG));
@@ -57,46 +61,39 @@ SPIComCntrl::SPIComCntrl()
     m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
     m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
     m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
-    
+
     m_Timer.start();
 
-    printf("SPIComCntrl test mode initialized.\n");
+    // printf("SPIComCntrl test mode initialized.\n");
 }
 
 SPIComCntrl::~SPIComCntrl() = default;
 
-
-// Global / file-local IK object like in your style
-InverseKinematics3Leg ik;
-InverseKinematics3Leg::Input ikInput;
-
 void SPIComCntrl::executeTask()
 {
+    // ============================================================
+    // Zeitmessung für MATLAB-Logging
+    // ============================================================
+    static auto time_previous_us = m_Timer.elapsed_time();
+    const auto time_us = m_Timer.elapsed_time();
+
+    const float dtime_us = static_cast<float>(
+        std::chrono::duration_cast<std::chrono::microseconds>(time_us - time_previous_us).count());
+
+    time_previous_us = time_us;
+
+    // ============================================================
+    // IMU lesen
+    // ============================================================
     ImuData imuData = m_Imu.getImuData();
-
-    static uint32_t print_cnt = 0;
-    print_cnt++;
-
-    if (print_cnt >= 50) {
-        print_cnt = 0;
-
-        const float roll_deg  = imuData.rpy(0) * 180.0f / M_PIf;
-        const float pitch_deg = imuData.rpy(1) * 180.0f / M_PIf;
-        const float yaw_deg   = imuData.rpy(2) * 180.0f / M_PIf;
-
-        printf("gyro [rad/s] = [%.4f, %.4f, %.4f] | "
-               "acc [m/s^2] = [%.4f, %.4f, %.4f] | "
-               "roll = %.2f deg | pitch = %.2f deg | yaw = %.2f deg\n",
-               imuData.gyro(0), imuData.gyro(1), imuData.gyro(2),
-               imuData.acc(0),  imuData.acc(1),  imuData.acc(2),
-               roll_deg, pitch_deg, yaw_deg);
+    if (!m_Imu.isCalibrated()) {
+        // printf("IMU calibrating... %u/%u\n", m_avg_cntr, BBOP_IMU_NUM_RUNS_FOR_AVERAGE);
     }
-
+    
     // ============================================================
     // TEST MODE:
     // Fixed platform pose -> IK -> Servo commands
     // ============================================================
-
     ikInput.roll  = DegreeToRad(0.0f);
     ikInput.pitch = DegreeToRad(0.0f);
     ikInput.h     = 110.5f;
@@ -111,36 +108,59 @@ void SPIComCntrl::executeTask()
         m_servoD0.setPulseWidth(m_servo_commands[0]);
         m_servoD1.setPulseWidth(m_servo_commands[1]);
         m_servoD2.setPulseWidth(m_servo_commands[2]);
-        return;
+    } else {
+        float servo1_cmd_deg = SERVO1_HOME_DEG - (ikResult.alphaDeg[0] - IK_HOME_DEG);
+        float servo2_cmd_deg = SERVO2_HOME_DEG - (ikResult.alphaDeg[1] - IK_HOME_DEG);
+        float servo3_cmd_deg = SERVO3_HOME_DEG - (ikResult.alphaDeg[2] - IK_HOME_DEG);
+
+        servo1_cmd_deg = clamp(servo1_cmd_deg,
+                               SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                               SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+        servo2_cmd_deg = clamp(servo2_cmd_deg,
+                               SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                               SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+        servo3_cmd_deg = clamp(servo3_cmd_deg,
+                               SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                               SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+        servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+        servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+        servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+
+        m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg);
+        m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg);
+        m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg);
+
+        m_servoD0.setPulseWidth(m_servo_commands[0]);
+        m_servoD1.setPulseWidth(m_servo_commands[1]);
+        m_servoD2.setPulseWidth(m_servo_commands[2]);
     }
 
-    float servo1_cmd_deg = SERVO1_HOME_DEG - (ikResult.alphaDeg[0] - IK_HOME_DEG);
-    float servo2_cmd_deg = SERVO2_HOME_DEG - (ikResult.alphaDeg[1] - IK_HOME_DEG);
-    float servo3_cmd_deg = SERVO3_HOME_DEG - (ikResult.alphaDeg[2] - IK_HOME_DEG);
+    // ============================================================
+    // UART / SerialStream Export für MATLAB
+    // ============================================================
+    if (m_SerialStream.startByteReceived()) {
+        m_SerialStream.write(dtime_us);          //  0 Delta time in us
+        m_SerialStream.write(m_servo_commands[0]); //  1 Servo 1 PWM normiert
+        m_SerialStream.write(m_servo_commands[1]); //  2 Servo 2 PWM normiert
+        m_SerialStream.write(m_servo_commands[2]); //  3 Servo 3 PWM normiert
 
-    servo1_cmd_deg = clamp(servo1_cmd_deg,
-                           SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                           SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+        m_SerialStream.write(imuData.gyro.x());  //  4 Gyro X [rad/s]
+        m_SerialStream.write(imuData.gyro.y());  //  5 Gyro Y [rad/s]
+        m_SerialStream.write(imuData.gyro.z());  //  6 Gyro Z [rad/s]
 
-    servo2_cmd_deg = clamp(servo2_cmd_deg,
-                           SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                           SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+        m_SerialStream.write(imuData.acc.x());   //  7 Acc X [m/s^2]
+        m_SerialStream.write(imuData.acc.y());   //  8 Acc Y [m/s^2]
+        m_SerialStream.write(imuData.acc.z());   //  9 Acc Z [m/s^2]
 
-    servo3_cmd_deg = clamp(servo3_cmd_deg,
-                           SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                           SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+        m_SerialStream.write(imuData.rpy.x());   // 10 Roll  [rad]
+        m_SerialStream.write(imuData.rpy.y());   // 11 Pitch [rad]
+        m_SerialStream.write(imuData.rpy.z());   // 12 Yaw   [rad]
 
-    servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
-    servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
-    servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
-
-    m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg);
-    m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg);
-    m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg);
-
-    m_servoD0.setPulseWidth(m_servo_commands[0]);
-    m_servoD1.setPulseWidth(m_servo_commands[1]);
-    m_servoD2.setPulseWidth(m_servo_commands[2]);
+        m_SerialStream.send();
+    }
 }
 
 float SPIComCntrl::clamp(float val, float min, float max)
