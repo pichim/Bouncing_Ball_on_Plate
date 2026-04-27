@@ -1,11 +1,12 @@
 #include "SPIComCntrl.h"
 #include "InverseKinematics3Leg.h"
+#include "KalmanBall1D.h"
 #include <chrono>
 
 // Servo & Inverse Kinematics mapping constants
 namespace
 {
-    constexpr float IK_HOME_DEG = 90.0f;    // aus IK: roll=0, pitch=0, h=98.1
+    constexpr float IK_HOME_DEG = 90.0f;    // aus IK: roll=0, pitch=0, h=110.5
     constexpr float SERVO_MAX_DEG = 122.7f; // real nutzbarer Servobereich
     constexpr float SERVO_MIN_DEG = 0.0f;
 
@@ -21,6 +22,9 @@ namespace
 // Global / file-local IK object like in your style
 InverseKinematics3Leg ik;
 InverseKinematics3Leg::Input ikInput;
+
+KalmanBall1D m_kalmanX;
+KalmanBall1D m_kalmanY;
 
 SPIComCntrl::SPIComCntrl()
     : RealTimeThread(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US,
