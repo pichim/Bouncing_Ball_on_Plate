@@ -22,6 +22,16 @@ namespace
 
     // Zum vorsichtigen Aktivieren: zuerst kleiner als 1 testen
     constexpr float TRAJ_FF_GAIN = 0.45f;
+
+    // Kalman / Timing
+    constexpr float CAMERA_TS_S = 0.020f; // 50 Hz
+    constexpr float CONTROL_TS_S = 0.002f; // 500 Hz
+
+    // Diese Werte mit deinen MATLAB-Werten ersetzen!
+    // He = lqr(Ae.', Ce.', Qe, Re).'
+    constexpr float KALMAN_HE_0 = 39.097973f;
+    constexpr float KALMAN_HE_1 = 714.325806f;
+    constexpr float KALMAN_HE_2 = 1.000000f;
 }
 
 SPIComCntrl::SPIComCntrl()
@@ -51,9 +61,26 @@ SPIComCntrl::SPIComCntrl()
     printf("SPI Communication started. Waiting for master...\n");
 
     //create PID-T1 controller
-    m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
-    m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, CONTROL_TS_S, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, CONTROL_TS_S, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
 
+    // Kalman observer gain from MATLAB
+    Eigen::Vector3f He;
+    He << KALMAN_HE_0,
+        KALMAN_HE_1,
+        KALMAN_HE_2;
+
+    // Kalman prediction runs with IMU / main loop frequency: 1 kHz
+    m_kalmanX.init(m_Ts, CAMERA_TS_S, G_MM_S2, He);
+    m_kalmanY.init(m_Ts, CAMERA_TS_S, G_MM_S2, He);
+
+    // Optional safety limits
+    m_kalmanX.setMaxInnovationMm(80.0f);
+    m_kalmanY.setMaxInnovationMm(80.0f);
+
+    m_kalmanX.setMaxDisturbanceRad(0.15f);
+    m_kalmanY.setMaxDisturbanceRad(0.15f);
+    
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
     m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
@@ -99,35 +126,56 @@ void SPIComCntrl::executeTask()
     // Trajektorie einmal pro Zyklus berechnen
     float t_s = duration_cast<microseconds>(time_us).count() * 1.0e-6f;
 
-    // // Standard: Konstante Soll-Position
-    // float xd = 0.0f;
-    // float yd = 0.0f;
+    // Standard: Konstante Soll-Position
+    float xd = 0.0f;
+    float yd = 0.0f;
 
-    // float xd_ddot = 0.0f;
-    // float yd_ddot = 0.0f;
+    float xd_ddot = 0.0f;
+    float yd_ddot = 0.0f;
 
-    // Kreis Trajektorie mit 35mm Radius und 0.2 Hz Frequenz
-    // Parameter für Kreisbahn
-    float f = 0.2f;      // Hz
-    float R = 35.0f;     // mm
-    float w = 2.0f * PI * f;
+    // // Kreis Trajektorie mit 35mm Radius und 0.2 Hz Frequenz
+    // // Parameter für Kreisbahn
+    // float f = 0.2f;      // Hz
+    // float R = 35.0f;     // mm
+    // float w = 2.0f * PI * f;
 
-    // Berechnung der Soll-Position auf der Kreisbahn
-    float xd = R * std::cos(2.0f * PI * f * t_s);
-    float yd = R * std::sin(2.0f * PI * f * t_s);
+    // // Berechnung der Soll-Position auf der Kreisbahn
+    // float xd = R * std::cos(2.0f * PI * f * t_s);
+    // float yd = R * std::sin(2.0f * PI * f * t_s);
     
-    // Berechnung der Soll-Geschwindigkeit
-    float xd_dot  = -R * w * std::sin(w * t_s);
-    float yd_dot  =  R * w * std::cos(w * t_s);
+    // // Berechnung der Soll-Geschwindigkeit
+    // float xd_dot  = -R * w * std::sin(w * t_s);
+    // float yd_dot  =  R * w * std::cos(w * t_s);
 
-    // Berechnung der Soll-Beschleunigung
-    float xd_ddot = -R * w * w * std::cos(w * t_s);
-    float yd_ddot = -R * w * w * std::sin(w * t_s);
+    // // Berechnung der Soll-Beschleunigung
+    // float xd_ddot = -R * w * w * std::cos(w * t_s);
+    // float yd_ddot = -R * w * w * std::sin(w * t_s);
 
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
-    // if (!m_Imu.isCalibrated())
-    //     return;
+    
+    // Kalman prediction runs every 1 ms
+    if (m_Imu.isCalibrated()) {
+
+        const float roll_rad  = m_ImuData.rpy.x();
+        const float pitch_rad = m_ImuData.rpy.y();
+
+        /*
+        * From your MATLAB test:
+        * pitch_imu_rad -> x_ball_mm
+        *
+        * Therefore:
+        * x-axis prediction uses pitch
+        * y-axis prediction uses roll
+        *
+        * If the direction is wrong in the test, change the sign here.
+        */
+        const float angle_x_rad = pitch_rad;
+        const float angle_y_rad = roll_rad;
+
+        m_kalmanX.predict(angle_x_rad);
+        m_kalmanY.predict(angle_y_rad);
+    }
 
     // Handle SPI communication: check for new data, update control, prepare reply  
     static int missing_data_counter = 0;
@@ -135,56 +183,54 @@ void SPIComCntrl::executeTask()
 
     if (newDataAvailable) {
         m_spiData = m_SpiSlaveDMA.getSPIData();
-        
-    //     // Wenn der Ball länger weg war, Regler-Historie löschen, um Schock zu vermeiden
-    //     if ((missing_data_counter * m_Ts) > VISION_TIMEOUT) { 
-    //         m_ballPosCntrl_x.reset(0.0f); 
-    //         m_ballPosCntrl_y.reset(0.0f); 
-    //     }
-    //     missing_data_counter = 0; // Ball ist wieder da, Counter resetten
 
+        const float x_meas_mm = m_spiData.data[0];
+        const float y_meas_mm = m_spiData.data[1];
 
-        // NEU: Wenn der Ball gerade eben erst wieder aufgetaucht ist (nach mindestens 1 Frame Pause)
-        if ((missing_data_counter * m_Ts) > VISION_TIMEOUT) { 
-            // Wir setzen den Regler auf den AKTUELLEN Fehlerwert, 
-            // damit delta_error im nächsten Schritt 0 ist.
+        const bool ballWasLost =
+            (missing_data_counter * m_Ts) > VISION_TIMEOUT;
 
-            // Aktueller Fehler als Startwert für den Regler
-            float current_error_x = xd - m_spiData.data[0];
-            float current_error_y = yd - m_spiData.data[1];
+        if (ballWasLost) {
+            /*
+            * Ball was missing for a longer time.
+            * Reset Kalman states to the new camera position.
+            */
+            m_kalmanX.reset(x_meas_mm, 0.0f, 0.0f);
+            m_kalmanY.reset(y_meas_mm, 0.0f, 0.0f);
 
-            m_ballPosCntrl_x.reset(current_error_x); 
-            m_ballPosCntrl_y.reset(current_error_y); 
+            float current_error_x = xd - x_meas_mm;
+            float current_error_y = yd - y_meas_mm;
+
+            m_ballPosCntrl_x.reset(current_error_x);
+            m_ballPosCntrl_y.reset(current_error_y);
+        } else {
+            /*
+            * Normal camera correction.
+            * Important: call update only once per new camera measurement.
+            */
+            m_kalmanX.update(x_meas_mm);
+            m_kalmanY.update(y_meas_mm);
         }
-        
-        missing_data_counter = 0;
 
-        // // When logging via SerialStream you have to uncomment this print
-        // printf("Message: %lu | Delta Time: %lu us | "
-        //        "Received: [%.2f, %.2f, %.2f] | "
-        //        "Header: 0x%02X | Failed: %lu | "
-        //        "Readout Time: %lu us\n",
-        //        m_spiData.message_count,
-        //        m_spiData.last_delta_time_us,
-        //        m_spiData.data[0],
-        //        m_spiData.data[1],
-        //        m_spiData.data[2],
-        //        SPI_HEADER_SLAVE,
-        //        m_spiData.failed_count,
-        //        m_spiData.readout_time_us);
+            missing_data_counter = 0;
 
-    } else {
-        missing_data_counter++; // Kein Ball in diesem Frame
+        } else {
+            missing_data_counter++;
     }
 
 
     if (m_Imu.isCalibrated()) {
         
         if ((missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
-            
+            // Kalman-Schätzungen lesen
+            const float x_hat_mm = m_kalmanX.getPositionMm();
+            const float y_hat_mm = m_kalmanY.getPositionMm();
+
             // Calculate error between desired postion and current ball position
-            float error_x = xd - m_spiData.data[0]; //input in mm
-            float error_y = yd - m_spiData.data[1]; //input in mm
+            // float error_x = xd - m_spiData.data[0]; //input in mm
+            // float error_y = yd - m_spiData.data[1]; //input in mm
+            float error_x = xd - x_hat_mm;
+            float error_y = yd - y_hat_mm;
 
             float control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x);
             float control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y);
@@ -290,6 +336,15 @@ void SPIComCntrl::executeTask()
         m_SerialStream.write(m_ImuData.rpy.x());   // 10 Roll in rad
         m_SerialStream.write(m_ImuData.rpy.y());   // 11 Pitch in rad
         m_SerialStream.write(m_ImuData.rpy.z());   // 12 Yaw in rad
+
+        m_SerialStream.write(m_kalmanX.getPositionMm());     // 13 x_hat
+        m_SerialStream.write(m_kalmanX.getVelocityMmS());    // 14 vx_hat
+        m_SerialStream.write(m_kalmanX.getDisturbanceRad()); // 15 dx_hat
+
+        m_SerialStream.write(m_kalmanY.getPositionMm());     // 16 y_hat
+        m_SerialStream.write(m_kalmanY.getVelocityMmS());    // 17 vy_hat
+        m_SerialStream.write(m_kalmanY.getDisturbanceRad()); // 18 dy_hat
+
         m_SerialStream.send();
     }
 }

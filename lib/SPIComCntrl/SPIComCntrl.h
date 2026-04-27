@@ -10,6 +10,7 @@
 #include "config.h"
 #include "mbed.h"
 #include "InverseKinematics3Leg.h"
+#include "KalmanBall1D.h"
 
 using namespace std::chrono;
 
@@ -83,6 +84,11 @@ private:
 
     InverseKinematics3Leg m_ik;
     InverseKinematics3Leg::Input m_ikInput;
+
+    KalmanBall1D m_kalmanX;
+    KalmanBall1D m_kalmanY;
+
+    uint32_t m_controllerDivider = 0;
 
     float m_Ts;
     PIDCntrl m_ballPosCntrl_x;
