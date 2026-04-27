@@ -9,7 +9,7 @@ KalmanBall1D::KalmanBall1D()
     , m_initialized(false)
     , m_x(Eigen::Vector3f::Zero())
     , m_L(Eigen::Vector3f::Zero())
-    , m_maxInnovationMm(80.0f)
+    , m_maxInnovationMm(100.0f)
     , m_maxDisturbanceRad(0.15f)
 {
 }

@@ -88,7 +88,10 @@ private:
     KalmanBall1D m_kalmanX;
     KalmanBall1D m_kalmanY;
 
-    uint32_t m_controllerDivider = 0;
+    bool m_kalmanHasFirstMeasurement = false;
+
+    // uint32_t m_controllerDivider = 0; 
+    // Damit Regler mit 500Hz läuft brauchen wir einen Teiler, da der Thread mit 1000Hz läuft. --- IGNORE ---
 
     float m_Ts;
     PIDCntrl m_ballPosCntrl_x;

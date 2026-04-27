@@ -25,7 +25,7 @@ namespace
 
     // Kalman / Timing
     constexpr float CAMERA_TS_S = 0.020f; // 50 Hz
-    constexpr float CONTROL_TS_S = 0.002f; // 500 Hz
+    constexpr float CONTROL_TS_S = 0.001f; // 1000 Hz
 
     // Diese Werte mit deinen MATLAB-Werten ersetzen!
     // He = lqr(Ae.', Ce.', Qe, Re).'
@@ -70,13 +70,13 @@ SPIComCntrl::SPIComCntrl()
         KALMAN_HE_1,
         KALMAN_HE_2;
 
-    // Kalman prediction runs with IMU / main loop frequency: 1 kHz
+    // Kalman prediction runs with control loop frequency: 1000 Hz
     m_kalmanX.init(m_Ts, CAMERA_TS_S, G_MM_S2, He);
     m_kalmanY.init(m_Ts, CAMERA_TS_S, G_MM_S2, He);
 
     // Optional safety limits
-    m_kalmanX.setMaxInnovationMm(80.0f);
-    m_kalmanY.setMaxInnovationMm(80.0f);
+    m_kalmanX.setMaxInnovationMm(100.0f);
+    m_kalmanY.setMaxInnovationMm(100.0f);
 
     m_kalmanX.setMaxDisturbanceRad(0.15f);
     m_kalmanY.setMaxDisturbanceRad(0.15f);
@@ -154,8 +154,8 @@ void SPIComCntrl::executeTask()
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
     
-    // Kalman prediction runs every 1 ms
-    if (m_Imu.isCalibrated()) {
+    // Kalman prediction runs every 1 ms (1 kHz)
+    if (m_Imu.isCalibrated() && m_kalmanHasFirstMeasurement) {
 
         const float roll_rad  = m_ImuData.rpy.x();
         const float pitch_rad = m_ImuData.rpy.y();
@@ -190,24 +190,40 @@ void SPIComCntrl::executeTask()
         const bool ballWasLost =
             (missing_data_counter * m_Ts) > VISION_TIMEOUT;
 
-        if (ballWasLost) {
+        if (!m_kalmanHasFirstMeasurement)  {
             /*
-            * Ball was missing for a longer time.
-            * Reset Kalman states to the new camera position.
+            * First valid camera measurement.
+            * Initialize Kalman directly at the measured ball position..
             */
             m_kalmanX.reset(x_meas_mm, 0.0f, 0.0f);
             m_kalmanY.reset(y_meas_mm, 0.0f, 0.0f);
+
+            m_kalmanHasFirstMeasurement = true;
 
             float current_error_x = xd - x_meas_mm;
             float current_error_y = yd - y_meas_mm;
 
             m_ballPosCntrl_x.reset(current_error_x);
             m_ballPosCntrl_y.reset(current_error_y);
-        } else {
+        } else if (ballWasLost) {
+                /*
+                 * Ball was missing for a longer time.  
+                 * Reset Kalman states to the new camera position.
+                 */
+                m_kalmanX.reset(x_meas_mm, 0.0f, 0.0f);
+                m_kalmanY.reset(y_meas_mm, 0.0f, 0.0f);
+
+                const float current_error_x = xd - x_meas_mm;
+                const float current_error_y = yd - y_meas_mm;
+
+                m_ballPosCntrl_x.reset(current_error_x);
+                m_ballPosCntrl_y.reset(current_error_y);
+        }
+        else {
             /*
-            * Normal camera correction.
-            * Important: call update only once per new camera measurement.
-            */
+             * Normal camera correction.
+             * Important: call update only once per new camera measurement.
+             */
             m_kalmanX.update(x_meas_mm);
             m_kalmanY.update(y_meas_mm);
         }
@@ -221,7 +237,8 @@ void SPIComCntrl::executeTask()
 
     if (m_Imu.isCalibrated()) {
         
-        if ((missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
+        if (m_kalmanHasFirstMeasurement && (missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
+            
             // Kalman-Schätzungen lesen
             const float x_hat_mm = m_kalmanX.getPositionMm();
             const float y_hat_mm = m_kalmanY.getPositionMm();
@@ -337,13 +354,20 @@ void SPIComCntrl::executeTask()
         m_SerialStream.write(m_ImuData.rpy.y());   // 11 Pitch in rad
         m_SerialStream.write(m_ImuData.rpy.z());   // 12 Yaw in rad
 
-        m_SerialStream.write(m_kalmanX.getPositionMm());     // 13 x_hat
-        m_SerialStream.write(m_kalmanX.getVelocityMmS());    // 14 vx_hat
-        m_SerialStream.write(m_kalmanX.getDisturbanceRad()); // 15 dx_hat
+        m_SerialStream.write(m_spiData.data[0]);              // 13 x_meas camera [mm]
+        m_SerialStream.write(m_spiData.data[1]);              // 14 y_meas camera [mm]
+        m_SerialStream.write(m_spiData.data[2]);              // 15 z_meas camera [mm]
 
-        m_SerialStream.write(m_kalmanY.getPositionMm());     // 16 y_hat
-        m_SerialStream.write(m_kalmanY.getVelocityMmS());    // 17 vy_hat
-        m_SerialStream.write(m_kalmanY.getDisturbanceRad()); // 18 dy_hat
+        m_SerialStream.write(m_kalmanX.getPositionMm());      // 16 x_hat [mm]
+        m_SerialStream.write(m_kalmanX.getVelocityMmS());     // 17 vx_hat [mm/s]
+        m_SerialStream.write(m_kalmanX.getDisturbanceRad());  // 18 dx_hat [rad]
+
+        m_SerialStream.write(m_kalmanY.getPositionMm());      // 19 y_hat [mm]
+        m_SerialStream.write(m_kalmanY.getVelocityMmS());     // 20 vy_hat [mm/s]
+        m_SerialStream.write(m_kalmanY.getDisturbanceRad());  // 21 dy_hat [rad]
+
+        m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f); // 22 camera update flag
+        m_SerialStream.write(m_kalmanHasFirstMeasurement ? 1.0f : 0.0f); // 23 kalman valid flag
 
         m_SerialStream.send();
     }
