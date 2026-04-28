@@ -27,8 +27,9 @@ namespace
     constexpr float CAMERA_TS_S = 0.020f; // 50 Hz
     constexpr float CONTROL_TS_S = 0.001f; // 1000 Hz
 
-    // Diese Werte mit deinen MATLAB-Werten ersetzen!
+    // Aus MATLAB:
     // He = lqr(Ae.', Ce.', Qe, Re).'
+    // Kontinuierlicher Beobachtergewinn He
     constexpr float KALMAN_HE_0 = 39.097973f;
     constexpr float KALMAN_HE_1 = 714.325806f;
     constexpr float KALMAN_HE_2 = 1.000000f;
