@@ -25,7 +25,7 @@ namespace
 
     // Kalman / Timing
     constexpr float CAMERA_TS_S = 0.020f; // 50 Hz
-    constexpr float CONTROL_TS_S = 0.001f; // 1000 Hz
+    constexpr float CONTROL_TS_S = 0.02f; // 1000 Hz
 
     // Aus MATLAB:
     // He = lqr(Ae.', Ce.', Qe, Re).'
@@ -51,6 +51,7 @@ SPIComCntrl::SPIComCntrl()
     , m_servoD2(BBOP_SERVO_D2_PIN, BBOP_SERVO_PWM_PERIOD_US)
     , m_SerialStream(BBOP_LOG_COM_UART_TX_PIN, BBOP_LOG_COM_UART_RX_PIN)
     , m_Ts(static_cast<float>(BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US) * 1.0e-6f)
+    , user_button(BBOP_USER_BUTTON, PullUp)
 {
     // Start SPI communication; guard failure
     if (!m_SpiSlaveDMA.start()) {
@@ -118,6 +119,8 @@ void SPIComCntrl::executeTask()
     if (!m_spi_ready) {
         return;
     }
+
+    user_button.rise(callback(this, &SPIComCntrl::toggleExecuteMainFcn));
 
     // Measure delta time
     const microseconds time_us = m_Timer.elapsed_time();
@@ -344,36 +347,58 @@ void SPIComCntrl::executeTask()
     // Send data over serial stream
     if (m_SerialStream.startByteReceived()) {
         m_SerialStream.write(dtime_us);            //  0 Delta time in us
-        m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
-        m_SerialStream.write(m_servo_commands[1]); //  2 Echo servo D1 command
-        m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
-        m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
-        m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
-        m_SerialStream.write(m_ImuData.gyro.z());  //  6 Gyro Z in rad/sec
-        m_SerialStream.write(m_ImuData.acc.x());   //  7 Acc X in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.y());   //  8 Acc Y in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.z());   //  9 Acc Z in m/sec^2
-        m_SerialStream.write(m_ImuData.rpy.x());   // 10 Roll in rad
-        m_SerialStream.write(m_ImuData.rpy.y());   // 11 Pitch in rad
-        m_SerialStream.write(m_ImuData.rpy.z());   // 12 Yaw in rad
+        // m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
+        // m_SerialStream.write(m_servo_commands[1]); //  2 Echo servo D1 command
+        // m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
+        // m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
+        // m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
+        // m_SerialStream.write(m_ImuData.gyro.z());  //  6 Gyro Z in rad/sec
+        m_SerialStream.write(m_ImuData.acc.x());   //  1 Acc X in m/sec^2
+        m_SerialStream.write(m_ImuData.acc.y());   //  2 Acc Y in m/sec^2
+        m_SerialStream.write(m_ImuData.acc.z());   //  3 Acc Z in m/sec^2
+        m_SerialStream.write(m_ImuData.rpy.x());   // 4 Roll in rad
+        m_SerialStream.write(m_ImuData.rpy.y());   // 5 Pitch in rad
+        // m_SerialStream.write(m_ImuData.rpy.z());   // 6 Yaw in rad
 
-        m_SerialStream.write(m_spiData.data[0]);              // 13 x_meas camera [mm]
-        m_SerialStream.write(m_spiData.data[1]);              // 14 y_meas camera [mm]
-        m_SerialStream.write(m_spiData.data[2]);              // 15 z_meas camera [mm]
+        m_SerialStream.write(m_spiData.data[0]);              // 1 x_meas camera [mm]
+        m_SerialStream.write(m_spiData.data[1]);              // 2 y_meas camera [mm]
+        // m_SerialStream.write(m_spiData.data[2]);              // 3 z_meas camera [mm]
 
-        m_SerialStream.write(m_kalmanX.getPositionMm());      // 16 x_hat [mm]
-        m_SerialStream.write(m_kalmanX.getVelocityMmS());     // 17 vx_hat [mm/s]
-        m_SerialStream.write(m_kalmanX.getDisturbanceRad());  // 18 dx_hat [rad]
+        m_SerialStream.write(m_kalmanX.getPositionMm());      // 4 x_hat [mm]
+        m_SerialStream.write(m_kalmanX.getVelocityMmS());     // 5 vx_hat [mm/s]
+        m_SerialStream.write(m_kalmanX.getDisturbanceRad());  // 6 dx_hat [rad]
 
-        m_SerialStream.write(m_kalmanY.getPositionMm());      // 19 y_hat [mm]
-        m_SerialStream.write(m_kalmanY.getVelocityMmS());     // 20 vy_hat [mm/s]
-        m_SerialStream.write(m_kalmanY.getDisturbanceRad());  // 21 dy_hat [rad]
+        m_SerialStream.write(m_kalmanY.getPositionMm());      // 7 y_hat [mm]
+        m_SerialStream.write(m_kalmanY.getVelocityMmS());     // 8 vy_hat [mm/s]
+        m_SerialStream.write(m_kalmanY.getDisturbanceRad());  // 9 dy_hat [rad]
 
         m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f); // 22 camera update flag
         m_SerialStream.write(m_kalmanHasFirstMeasurement ? 1.0f : 0.0f); // 23 kalman valid flag
 
         m_SerialStream.send();
+        
     }
+    if (m_executeMain) {
+        if (!m_servoD0.isEnabled()) {
+            m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG));
+        }
+        if (!m_servoD1.isEnabled()) {
+            m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG));
+        }
+        if (!m_servoD2.isEnabled()) {
+            m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG));
+        }
+    } else {
+        m_servoD0.disable();
+        m_servoD1.disable();
+        m_servoD2.disable();
+    }
+}
+
+void SPIComCntrl::toggleExecuteMainFcn()
+{
+    // Toggle some execution flag
+    m_executeMain = !m_executeMain;
 }
 
 float SPIComCntrl::clamp(float val, float min, float max)

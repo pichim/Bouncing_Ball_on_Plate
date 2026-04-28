@@ -11,6 +11,7 @@
 #include "mbed.h"
 #include "InverseKinematics3Leg.h"
 #include "KalmanBall1D.h"
+#include "DebounceIn.h"
 
 using namespace std::chrono;
 
@@ -53,13 +54,16 @@ private:
     // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
-    static constexpr float BALL_CTRL_KP = 0.08f; 
+   
+    static constexpr float BALL_CTRL_KP = 0.2383 * 0.3f; //0.2f;
     static constexpr float BALL_CTRL_KI = 0.0f;
-    static constexpr float BALL_CTRL_TAU_V = 6.0f;
-    static constexpr float BALL_CTRL_TAU_f = 0.2627f * 1.5f;   
-    static constexpr float BALL_CTRL_TAU_R_O = 0.0318f * 5.0f;
+    static constexpr float BALL_CTRL_TAU_V = 4.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
+    static constexpr float BALL_CTRL_TAU_f = 0.1314f * 2.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
+    static constexpr float BALL_CTRL_TAU_R_O = 0.0398f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+
+
     
     static constexpr float PI = 3.14159265358979323846f;
 
@@ -102,6 +106,11 @@ private:
     float m_reply_data[SPI_NUM_FLOATS];
 
     bool m_spi_ready{false};
+
+    //userbutton
+    DebounceIn user_button;
+    bool m_executeMain{false};
+    void toggleExecuteMainFcn();
 
     void executeTask() override;
     static float clamp(float val, float min, float max);

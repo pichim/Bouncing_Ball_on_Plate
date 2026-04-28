@@ -41,4 +41,7 @@
 #define BBOP_LOG_COM_UART_TX_PIN PA_9
 #define BBOP_LOG_COM_UART_RX_PIN PA_10
 
+// Button
+#define BBOP_USER_BUTTON PB_1
+
 #endif /* BBOP_CONFIG_H_ */
