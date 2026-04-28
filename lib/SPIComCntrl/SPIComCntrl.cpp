@@ -244,8 +244,10 @@ void SPIComCntrl::executeTask()
             const float y_hat_mm = m_kalmanY.getPositionMm();
 
             // Calculate error between desired postion and current ball position
+            // Calculate error without Kalman
             // float error_x = xd - m_spiData.data[0]; //input in mm
             // float error_y = yd - m_spiData.data[1]; //input in mm
+            // Calculate error with Kalman
             float error_x = xd - x_hat_mm;
             float error_y = yd - y_hat_mm;
 
