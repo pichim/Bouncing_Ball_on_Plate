@@ -330,8 +330,8 @@ void SPIComCntrl::executeTask()
     }
 
     // Prepare next reply
-    m_reply_data[0] = m_spiData.data[0]; // Echo servo D0 command
-    m_reply_data[1] = m_spiData.data[1]; // error distance
+    m_reply_data[0] = m_spiData.data[0]; // x ball camera [mm]
+    m_reply_data[1] = m_spiData.data[1]; // y ball camera [mm]
     m_reply_data[2] = m_servo_commands[2]; // Echo servo D2 command
     m_reply_data[3] = m_ImuData.gyro.x();  // Gyro X in rad/sec
     m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
