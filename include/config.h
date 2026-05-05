@@ -27,10 +27,12 @@
 #define BBOP_SERVO_D0_PIN PB_2
 #define BBOP_SERVO_D1_PIN PC_8
 #define BBOP_SERVO_D2_PIN PC_6
-#define BBOP_SERVO_PWM_PERIOD_US 2000 // 2ms period
+#define BBOP_SERVO_PWM_PERIOD_US 3003 // 20 ms period for standard hobby servos only temporary!
 // #define BBOP_SERVO_angle_range_rad 2.141519f
-#define BBOP_SERVO_angle_range_grad 122.7f
-// #define BBOP_SERVO_angle_range_grad 110.0f
+
+#define BBOP_SERVO1_angle_range_grad 116.35f
+#define BBOP_SERVO2_angle_range_grad 115.55f
+#define BBOP_SERVO3_angle_range_grad 114.4f
 
 // SPI Communication and Control Thread
 #define BBOP_SPI_COM_CNTRL_THREAD_PERIOD_US 1000
@@ -38,10 +40,11 @@
 #define BBOP_SPI_COM_CNTRL_THREAD_STACK_SIZE OS_STACK_SIZE
 
 // UART for logging communication (stream to PC for the fast running threads)
+
 #define BBOP_LOG_COM_UART_TX_PIN PA_9
 #define BBOP_LOG_COM_UART_RX_PIN PA_10
 
-// Button
 #define BBOP_USER_BUTTON PB_1
+
 
 #endif /* BBOP_CONFIG_H_ */

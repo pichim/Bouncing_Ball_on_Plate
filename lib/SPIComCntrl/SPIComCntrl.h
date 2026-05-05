@@ -23,9 +23,18 @@ public:
     virtual ~SPIComCntrl();
 
 private:
-    // MKS HBL669
-    float SERVO_PULSE_MIN = 0.2125f;
-    float SERVO_PULSE_MAX = 0.5375f;
+    //powerhd 1
+    static constexpr float SERVO1_PULSE_MIN = 0.3f;
+    static constexpr float SERVO1_PULSE_MAX = 0.695f;  
+
+    //powerhd 2
+    static constexpr float SERVO2_PULSE_MIN = 0.305f;
+    static constexpr float SERVO2_PULSE_MAX = 0.7025f;  
+
+    //powerhd 3
+    static constexpr float SERVO3_PULSE_MIN = 0.3025f;
+    static constexpr float SERVO3_PULSE_MAX = 0.6975f; 
+
     static constexpr float BALL_POS_CENTER_PX = 0.0f;
     static constexpr float ANGLE_DELTA_LIMIT_GRAD = 20.0f;
     
@@ -118,7 +127,7 @@ private:
     void executeTask() override;
     static float clamp(float val, float min, float max);
     static float clamp01(float val) { return clamp(val, 0.0f, 1.0f); }
-    static float DegreeToPWM(float degree);
+    static float DegreeToPWM(float degree, float range_degree);
     static float PWMToDegree(float pulse_width);
     static float DegreeToRad(float degree);
 };

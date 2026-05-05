@@ -4,14 +4,14 @@
 // Servo & Inverse Kinematics mapping constants
 namespace
 {
-    constexpr float IK_HOME_DEG = 90.0f;    // aus IK: roll=0, pitch=0, h=98.1
+    constexpr float IK_HOME_DEG = 55.0f;    // aus IK: roll=0, pitch=0, h=98.1
     constexpr float SERVO_MAX_DEG = 122.7f; // real nutzbarer Servobereich
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
-    constexpr float SERVO1_HOME_DEG = 90.0f + 6.5f; // 96.5°
-    constexpr float SERVO2_HOME_DEG = 90.0f + 9.0f; // 98.5°
-    constexpr float SERVO3_HOME_DEG = 90.0f - 0.5f; // 90.0°
+    constexpr float SERVO1_HOME_DEG = IK_HOME_DEG + 0.0f;
+    constexpr float SERVO2_HOME_DEG = IK_HOME_DEG + 0.0f;
+    constexpr float SERVO3_HOME_DEG = IK_HOME_DEG + 0.0f;
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f; 
@@ -84,31 +84,31 @@ SPIComCntrl::SPIComCntrl()
     m_kalmanY.setMaxDisturbanceRad(0.15f);
 
     // Trajectory
-    // m_trajectory.setHold(0.0f, 0.0f);
-    m_trajectory.setCircle(35.0f, 0.2f);
+    m_trajectory.setHold(0.0f, 0.0f);
+    // m_trajectory.setCircle(35.0f, 0.2f);
     
     // Calibrate and enable servos (normalised pulse widths)
-    m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-    m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-    m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
+    m_servoD0.calibratePulseMinMax(SERVO1_PULSE_MIN, SERVO1_PULSE_MAX);
+    m_servoD1.calibratePulseMinMax(SERVO2_PULSE_MIN, SERVO2_PULSE_MAX);
+    m_servoD2.calibratePulseMinMax(SERVO3_PULSE_MIN, SERVO3_PULSE_MAX);
 
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG));
+        m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad));
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG));
+        m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad));
     }
     if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG));
+        m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad));
     }
 
     // Verdrehungswinkel definieren Kamera zu Base
-    camera_offset_angle_deg = 90.0f + 14.73f;
-    camera_offset_angle_rad = DegreeToRad(camera_offset_angle_deg);
+    // camera_offset_angle_deg = 90.0f + 14.73f;
+    // camera_offset_angle_rad = DegreeToRad(camera_offset_angle_deg);
 
     // Berechne Sinus und Kosinus
-    cos_theta_rotation = std::cos(camera_offset_angle_rad);
-    sin_theta_rotation = std::sin(camera_offset_angle_rad);
+    // cos_theta_rotation = std::cos(camera_offset_angle_rad);
+    // sin_theta_rotation = std::sin(camera_offset_angle_rad);
 
     m_Timer.start();
 
@@ -245,7 +245,7 @@ void SPIComCntrl::executeTask()
 
     if (m_Imu.isCalibrated()) {
         
-        if (m_kalmanHasFirstMeasurement && (missing_data_counter * m_Ts) <= VISION_TIMEOUT) {
+        if (m_kalmanHasFirstMeasurement && (missing_data_counter * m_Ts) <= VISION_TIMEOUT && m_executeMain) {
             
             // Kalman-Schätzungen lesen
             const float x_hat_mm = m_kalmanX.getPositionMm();
@@ -255,37 +255,41 @@ void SPIComCntrl::executeTask()
 
             // Calculate error between desired postion and current ball position
             // Calculate error without Kalman
-            // float error_x = xd - m_spiData.data[0]; //input in mm
-            // float error_y = yd - m_spiData.data[1]; //input in mm
+            float error_x = xd - m_spiData.data[0]; //input in mm
+            float error_y = yd - m_spiData.data[1]; //input in mm
             // Calculate error with Kalman
-            error_x = xd - x_hat_mm;
-            error_y = yd - y_hat_mm;
-            error_vx = xd_dot - vx_hat_mm_s;
-            error_vy = yd_dot - vy_hat_mm_s;
+            // error_x = xd - x_hat_mm;
+            // error_y = yd - y_hat_mm;
+            // error_vx = xd_dot - vx_hat_mm_s;
+            // error_vy = yd_dot - vy_hat_mm_s;
             
             constexpr float BALL_CTRL_KV = 0.03f; // [deg / (mm/s)] vorsichtig starten
 
-            control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x) + BALL_CTRL_KV * error_vx;
-            control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y) + BALL_CTRL_KV * error_vy;
+            // control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x) + BALL_CTRL_KV * error_vx;
+            // control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y) + BALL_CTRL_KV * error_vy;
 
-            // Feedforward aus Soll-Beschleunigung
-            theta_ff_x_rad = xd_ddot / BALL_ACC_PER_RAD;
-            theta_ff_y_rad = yd_ddot / BALL_ACC_PER_RAD;
+            // // Feedforward aus Soll-Beschleunigung
+            // theta_ff_x_rad = xd_ddot / BALL_ACC_PER_RAD;
+            // theta_ff_y_rad = yd_ddot / BALL_ACC_PER_RAD;
 
-            theta_ff_x_grad = TRAJ_FF_GAIN * (theta_ff_x_rad * 180.0f / M_PIf);
-            theta_ff_y_grad = TRAJ_FF_GAIN * (theta_ff_y_rad * 180.0f / M_PIf);
+            // theta_ff_x_grad = TRAJ_FF_GAIN * (theta_ff_x_rad * 180.0f / M_PIf);
+            // theta_ff_y_grad = TRAJ_FF_GAIN * (theta_ff_y_rad * 180.0f / M_PIf);
 
-            // Gesamt-Stellgröße
-            float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
-            float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
+            // // Gesamt-Stellgröße
+            // float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
+            // float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
 
             // rotate control outputs
-            float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
-            float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
+            // float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
+            // float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
+
+
+            float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
+            float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
 
             // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
-            m_ikInput.pitch = DegreeToRad(rotated_output_x);
-            m_ikInput.roll  = -DegreeToRad(rotated_output_y);
+            m_ikInput.pitch = -DegreeToRad(control_output_x_grad);
+            m_ikInput.roll  = DegreeToRad(control_output_y_grad);
             m_ikInput.h     = 110.5f;
 
             InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
@@ -317,23 +321,23 @@ void SPIComCntrl::executeTask()
                 servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
 
                 // Erst ganz am Schluss in normierten Servo-Befehl umrechnen
-                m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg);
-                m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg);
-                m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg);
+                m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg, BBOP_SERVO1_angle_range_grad);
+                m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg, BBOP_SERVO2_angle_range_grad);
+                m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg, BBOP_SERVO3_angle_range_grad);
 
             } else {
                 // Falls IK fehlschlägt: sicher auf Home-Lage zurück
-                m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
-                m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
-                m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
+                m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+                m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+                m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
             }
 
         } else {
 
             // Ball weg, Servos in Mittelstellung halten
-            m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
-            m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
-            m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
+            m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+            m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+            m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
         }
 
         // Servo ansteuern
@@ -421,18 +425,18 @@ void SPIComCntrl::executeTask()
 
     if (m_executeMain) {
         if (!m_servoD0.isEnabled()) {
-            m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG));
+            m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad));
         }
         if (!m_servoD1.isEnabled()) {
-            m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG));
+            m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad));
         }
         if (!m_servoD2.isEnabled()) {
-            m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG));
+            m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad));
         }
     } else {
-        m_servoD0.disable();
-        m_servoD1.disable();
-        m_servoD2.disable();
+        m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+        m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+        m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
     }
 }
 
@@ -451,9 +455,9 @@ float SPIComCntrl::clamp(float val, float min, float max)
     return val;
 }
 
-float SPIComCntrl::DegreeToPWM(float degree)
+float SPIComCntrl::DegreeToPWM(float degree, float range_degree)
 {
-    float pulse_width = (degree / SERVO_MAX_DEG);
+    float pulse_width = (degree / range_degree);
     return pulse_width;
 }
 
