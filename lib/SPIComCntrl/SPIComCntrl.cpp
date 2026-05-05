@@ -82,6 +82,10 @@ SPIComCntrl::SPIComCntrl()
 
     m_kalmanX.setMaxDisturbanceRad(0.15f);
     m_kalmanY.setMaxDisturbanceRad(0.15f);
+
+    // Trajectory
+    // m_trajectory.setHold(0.0f, 0.0f);
+    m_trajectory.setCircle(35.0f, 0.2f);
     
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
@@ -131,29 +135,16 @@ void SPIComCntrl::executeTask()
     float t_s = duration_cast<microseconds>(time_us).count() * 1.0e-6f;
 
     // Standard: Konstante Soll-Position
-    float xd = 0.0f;
-    float yd = 0.0f;
+    TrajectoryRef traj = m_trajectory.update(t_s);
 
-    float xd_ddot = 0.0f;
-    float yd_ddot = 0.0f;
+    const float xd = traj.x_mm;
+    const float yd = traj.y_mm;
 
-    // // Kreis Trajektorie mit 35mm Radius und 0.2 Hz Frequenz
-    // // Parameter für Kreisbahn
-    // float f = 0.2f;      // Hz
-    // float R = 35.0f;     // mm
-    // float w = 2.0f * PI * f;
+    const float xd_dot = traj.vx_mm_s;
+    const float yd_dot = traj.vy_mm_s;
 
-    // // Berechnung der Soll-Position auf der Kreisbahn
-    // float xd = R * std::cos(2.0f * PI * f * t_s);
-    // float yd = R * std::sin(2.0f * PI * f * t_s);
-    
-    // // Berechnung der Soll-Geschwindigkeit
-    // float xd_dot  = -R * w * std::sin(w * t_s);
-    // float yd_dot  =  R * w * std::cos(w * t_s);
-
-    // // Berechnung der Soll-Beschleunigung
-    // float xd_ddot = -R * w * w * std::cos(w * t_s);
-    // float yd_ddot = -R * w * w * std::sin(w * t_s);
+    const float xd_ddot = traj.ax_mm_s2;
+    const float yd_ddot = traj.ay_mm_s2;
 
     // Read IMU data
     m_ImuData = m_Imu.getImuData();
@@ -238,6 +229,19 @@ void SPIComCntrl::executeTask()
             missing_data_counter++;
     }
 
+    float error_x = 0.0f;
+    float error_y = 0.0f;
+    float error_vx = 0.0f;
+    float error_vy = 0.0f;
+
+    float control_output_fb_x_grad = 0.0f;
+    float control_output_fb_y_grad = 0.0f;
+
+    float theta_ff_x_rad = 0.0f;
+    float theta_ff_y_rad = 0.0f;
+
+    float theta_ff_x_grad = 0.0f;
+    float theta_ff_y_grad = 0.0f;
 
     if (m_Imu.isCalibrated()) {
         
@@ -246,24 +250,30 @@ void SPIComCntrl::executeTask()
             // Kalman-Schätzungen lesen
             const float x_hat_mm = m_kalmanX.getPositionMm();
             const float y_hat_mm = m_kalmanY.getPositionMm();
+            const float vx_hat_mm_s = m_kalmanX.getVelocityMmS();
+            const float vy_hat_mm_s = m_kalmanY.getVelocityMmS();
 
             // Calculate error between desired postion and current ball position
             // Calculate error without Kalman
             // float error_x = xd - m_spiData.data[0]; //input in mm
             // float error_y = yd - m_spiData.data[1]; //input in mm
             // Calculate error with Kalman
-            float error_x = xd - x_hat_mm;
-            float error_y = yd - y_hat_mm;
+            error_x = xd - x_hat_mm;
+            error_y = yd - y_hat_mm;
+            error_vx = xd_dot - vx_hat_mm_s;
+            error_vy = yd_dot - vy_hat_mm_s;
+            
+            constexpr float BALL_CTRL_KV = 0.03f; // [deg / (mm/s)] vorsichtig starten
 
-            float control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x);
-            float control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y);
+            control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x) + BALL_CTRL_KV * error_vx;
+            control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y) + BALL_CTRL_KV * error_vy;
 
             // Feedforward aus Soll-Beschleunigung
-            float theta_ff_x_rad = xd_ddot / BALL_ACC_PER_RAD;
-            float theta_ff_y_rad = yd_ddot / BALL_ACC_PER_RAD;
+            theta_ff_x_rad = xd_ddot / BALL_ACC_PER_RAD;
+            theta_ff_y_rad = yd_ddot / BALL_ACC_PER_RAD;
 
-            float theta_ff_x_grad = TRAJ_FF_GAIN * (theta_ff_x_rad * 180.0f / M_PIf);
-            float theta_ff_y_grad = TRAJ_FF_GAIN * (theta_ff_y_rad * 180.0f / M_PIf);
+            theta_ff_x_grad = TRAJ_FF_GAIN * (theta_ff_x_rad * 180.0f / M_PIf);
+            theta_ff_y_grad = TRAJ_FF_GAIN * (theta_ff_y_rad * 180.0f / M_PIf);
 
             // Gesamt-Stellgröße
             float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
@@ -344,40 +354,71 @@ void SPIComCntrl::executeTask()
     m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
     m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
 
-    // Send data over serial stream
+    // // Send data over serial stream (Kalman)
+    // if (m_SerialStream.startByteReceived()) {
+    //     m_SerialStream.write(dtime_us);            //  0 Delta time in us
+    //     // m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
+    //     // m_SerialStream.write(m_servo_commands[1]); //  2 Echo servo D1 command
+    //     // m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
+    //     // m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
+    //     // m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
+    //     // m_SerialStream.write(m_ImuData.gyro.z());  //  6 Gyro Z in rad/sec
+    //     m_SerialStream.write(m_ImuData.acc.x());   //  1 Acc X in m/sec^2
+    //     m_SerialStream.write(m_ImuData.acc.y());   //  2 Acc Y in m/sec^2
+    //     m_SerialStream.write(m_ImuData.acc.z());   //  3 Acc Z in m/sec^2
+    //     m_SerialStream.write(m_ImuData.rpy.x());   // 4 Roll in rad
+    //     m_SerialStream.write(m_ImuData.rpy.y());   // 5 Pitch in rad
+    //     // m_SerialStream.write(m_ImuData.rpy.z());   // 6 Yaw in rad
+
+    //     m_SerialStream.write(m_spiData.data[0]);              // 1 x_meas camera [mm]
+    //     m_SerialStream.write(m_spiData.data[1]);              // 2 y_meas camera [mm]
+    //     // m_SerialStream.write(m_spiData.data[2]);              // 3 z_meas camera [mm]
+
+    //     m_SerialStream.write(m_kalmanX.getPositionMm());      // 4 x_hat [mm]
+    //     m_SerialStream.write(m_kalmanX.getVelocityMmS());     // 5 vx_hat [mm/s]
+    //     m_SerialStream.write(m_kalmanX.getDisturbanceRad());  // 6 dx_hat [rad]
+
+    //     m_SerialStream.write(m_kalmanY.getPositionMm());      // 7 y_hat [mm]
+    //     m_SerialStream.write(m_kalmanY.getVelocityMmS());     // 8 vy_hat [mm/s]
+    //     m_SerialStream.write(m_kalmanY.getDisturbanceRad());  // 9 dy_hat [rad]
+
+    //     m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f); // 22 camera update flag
+    //     m_SerialStream.write(m_kalmanHasFirstMeasurement ? 1.0f : 0.0f); // 23 kalman valid flag
+
+    //     m_SerialStream.send();
+        
+    // }
+
+    // Send data over serial stream (Trajectory)
     if (m_SerialStream.startByteReceived()) {
         m_SerialStream.write(dtime_us);            //  0 Delta time in us
-        // m_SerialStream.write(m_servo_commands[0]); //  1 Echo servo D0 command
-        // m_SerialStream.write(m_servo_commands[1]); //  2 Echo servo D1 command
-        // m_SerialStream.write(m_servo_commands[2]); //  3 Echo servo D2 command
-        // m_SerialStream.write(m_ImuData.gyro.x());  //  4 Gyro X in rad/sec
-        // m_SerialStream.write(m_ImuData.gyro.y());  //  5 Gyro Y in rad/sec
-        // m_SerialStream.write(m_ImuData.gyro.z());  //  6 Gyro Z in rad/sec
-        m_SerialStream.write(m_ImuData.acc.x());   //  1 Acc X in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.y());   //  2 Acc Y in m/sec^2
-        m_SerialStream.write(m_ImuData.acc.z());   //  3 Acc Z in m/sec^2
-        m_SerialStream.write(m_ImuData.rpy.x());   // 4 Roll in rad
-        m_SerialStream.write(m_ImuData.rpy.y());   // 5 Pitch in rad
-        // m_SerialStream.write(m_ImuData.rpy.z());   // 6 Yaw in rad
+        
+        m_SerialStream.write(xd);                  //  1 x_des [mm]
+        m_SerialStream.write(yd);                  //  2 y_des [mm]
+        m_SerialStream.write(xd_dot);              //  3 vx_des [mm/s]
+        m_SerialStream.write(yd_dot);              //  4 vy_des [mm/s]
 
-        m_SerialStream.write(m_spiData.data[0]);              // 1 x_meas camera [mm]
-        m_SerialStream.write(m_spiData.data[1]);              // 2 y_meas camera [mm]
-        // m_SerialStream.write(m_spiData.data[2]);              // 3 z_meas camera [mm]
+        m_SerialStream.write(m_spiData.data[0]);   //  5 x_meas [mm]
+        m_SerialStream.write(m_spiData.data[1]);   //  6 y_meas [mm]
+        m_SerialStream.write(m_kalmanX.getPositionMm()); //  7 x_hat [mm]
+        m_SerialStream.write(m_kalmanY.getPositionMm()); //  8 y_hat [mm]
 
-        m_SerialStream.write(m_kalmanX.getPositionMm());      // 4 x_hat [mm]
-        m_SerialStream.write(m_kalmanX.getVelocityMmS());     // 5 vx_hat [mm/s]
-        m_SerialStream.write(m_kalmanX.getDisturbanceRad());  // 6 dx_hat [rad]
+        m_SerialStream.write(error_x);             //  9 error_x [mm]
+        m_SerialStream.write(error_y);             // 10 error_y [mm]
+        m_SerialStream.write(error_vx);            // 11 error_vx [mm/s]
+        m_SerialStream.write(error_vy);            // 12 error_vy [mm/s]
 
-        m_SerialStream.write(m_kalmanY.getPositionMm());      // 7 y_hat [mm]
-        m_SerialStream.write(m_kalmanY.getVelocityMmS());     // 8 vy_hat [mm/s]
-        m_SerialStream.write(m_kalmanY.getDisturbanceRad());  // 9 dy_hat [rad]
+        m_SerialStream.write(control_output_fb_x_grad); // 13 feedback x [deg]
+        m_SerialStream.write(control_output_fb_y_grad); // 14 feedback y [deg]
+        m_SerialStream.write(theta_ff_x_grad);          // 15 feedforward x [deg]
+        m_SerialStream.write(theta_ff_y_grad);          // 16 feedforward y [deg]
 
-        m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f); // 22 camera update flag
-        m_SerialStream.write(m_kalmanHasFirstMeasurement ? 1.0f : 0.0f); // 23 kalman valid flag
+        m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);             // 17 camera update
+        m_SerialStream.write(m_kalmanHasFirstMeasurement ? 1.0f : 0.0f);  // 18 kalman valid
 
         m_SerialStream.send();
-        
     }
+
     if (m_executeMain) {
         if (!m_servoD0.isEnabled()) {
             m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG));

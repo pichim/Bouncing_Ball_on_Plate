@@ -12,6 +12,7 @@
 #include "InverseKinematics3Leg.h"
 #include "KalmanBall1D.h"
 #include "DebounceIn.h"
+#include "TrajectoryGenerator.h"
 
 using namespace std::chrono;
 
@@ -93,6 +94,8 @@ private:
     KalmanBall1D m_kalmanY;
 
     bool m_kalmanHasFirstMeasurement = false;
+
+    TrajectoryGenerator m_trajectory;
 
     // uint32_t m_controllerDivider = 0; 
     // Damit Regler mit 500Hz läuft brauchen wir einen Teiler, da der Thread mit 1000Hz läuft. --- IGNORE ---
