@@ -1,0 +1,87 @@
+%% Physik-Check: Kalman Filter OHNE Delay-Kompensation
+% -------------------------------------------------------------------------
+% 1. Parameter
+% -------------------------------------------------------------------------
+g = 9810;             
+Ts = 0.001;           
+k_drag = 0.064 / 1000; 
+
+% Filter Tuning
+% Da R_var bei dir EXTREM klein ist (1e-6), wird der Filter 
+% fast wie ein direkter Sensor-Read agieren und Sprünge machen.
+R_var = 0.001;        
+Q_var = diag([0.01, 60]); 
+
+% Matrizen für den Gain H (nur für das Tuning-Verhältnis)
+A_lin = [1, Ts; 0, 1];
+C_lin = [1, 0];
+H = dlqr(A_lin.', C_lin.', Q_var, R_var).'; 
+
+% -------------------------------------------------------------------------
+% 2. Daten & Initialisierung
+% -------------------------------------------------------------------------
+t        = data.time; 
+z_ball   = data.values(:, 3);
+
+x_hat_z   = [z_ball(1); 0]; 
+pos_z_est = zeros(size(t));
+vel_z_est = zeros(size(t));
+
+% -------------------------------------------------------------------------
+% 3. Filter-Schleife (Pure Physik & Update)
+% -------------------------------------------------------------------------
+for k = 1:length(t)
+    
+    % --- A. PRÄDIKTION (Das physikalische Modell) ---
+    v_alt = x_hat_z(2);
+    
+    % Drag & Gravitation
+    a_drag = -k_drag * v_alt * abs(v_alt); 
+    a_total = -g + a_drag; 
+    
+    % Integration (Vorwärtsschritt)
+    z_pred = x_hat_z(1) + v_alt * Ts + 0.5 * a_total * Ts^2;
+    v_pred = v_alt + a_total * Ts;
+    
+    x_hat_z = [z_pred; v_pred];
+    
+    % --- B. KORREKTUR (Direktes Update alle 20ms) ---
+    % Hinweis: Wir nutzen hier KEIN Delay mehr. 
+    % Wir vergleichen den JETZIGEN Schätzwert mit dem JETZIGEN Messwert.
+    if mod(k, 20) == 0
+        y_meas = z_ball(k);
+        
+        y_err = y_meas - x_hat_z(1); % Messfehler
+        x_hat_z = x_hat_z + H * y_err; % Kalman-Korrektur
+    end
+    
+    % Ergebnisse speichern
+    pos_z_est(k) = x_hat_z(1);
+    vel_z_est(k) = x_hat_z(2);
+end
+
+% -------------------------------------------------------------------------
+% 4. Plotting
+% -------------------------------------------------------------------------
+figure(115)
+subplot(2,1,1);
+plot(t, z_ball, 'Color', [0.7 0.7 0.7], 'Marker', '.', 'LineStyle', 'none');
+hold on;
+plot(t, pos_z_est, 'b', 'LineWidth', 1.5);
+title('Physik-Check: Position (Ohne Delay-Kompensation)');
+ylabel('Höhe [mm]');
+grid on;
+
+subplot(2,1,2);
+plot(t, vel_z_est, 'r', 'LineWidth', 1.5);
+title('Geschwindigkeit (v\_est)');
+xlabel('Zeit [s]');
+ylabel('v [mm/s]');
+grid on;
+
+figure8116)
+plot(t, z_ball);
+title('Bouncing höhe');
+xlabel('Zeit [s]');
+ylabel('v [mm/s]');
+grid on;

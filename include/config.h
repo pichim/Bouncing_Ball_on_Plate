@@ -20,6 +20,8 @@
 #define BBOP_IMU_NUM_RUNS_FOR_AVERAGE 1000
 #define BBOP_IMU_DO_USE_STATIC_ACC_CALIBRATION true // if this is true then averaged acc gets overwritten by BBOP_IMU_B_ACC
 #define BBOP_IMU_B_ACC {0.0f, 0.0f, 0.0f}
+// #define BBOP_IMU_KP (0.1592f * 2.0f * M_PIf)
+// #define BBOP_IMU_KI 0.0f
 #define BBOP_IMU_KP (0.1592f * 2.0f * M_PIf)
 #define BBOP_IMU_KI 0.0f
 

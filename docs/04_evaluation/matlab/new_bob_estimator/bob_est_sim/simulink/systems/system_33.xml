@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<System>
+  <P Name="Location">[140, 57, 1427, 963]</P>
+  <Block BlockType="Inport" Name="u" SID="34">
+    <P Name="Position">[-20, 348, 10, 362]</P>
+    <P Name="ZOrder">19</P>
+  </Block>
+  <Block BlockType="Inport" Name="y" SID="35">
+    <P Name="Position">[330, 228, 360, 242]</P>
+    <P Name="ZOrder">20</P>
+    <P Name="Port">2</P>
+  </Block>
+  <Block BlockType="Gain" Name="Gain" SID="36">
+    <P Name="Position">[45, 335, 95, 375]</P>
+    <P Name="ZOrder">12</P>
+    <P Name="Gain">Be</P>
+    <P Name="Multiplication">Matrix(K*u)</P>
+  </Block>
+  <Block BlockType="Gain" Name="Gain1" SID="37">
+    <P Name="Position">[175, 390, 225, 430]</P>
+    <P Name="ZOrder">13</P>
+    <P Name="BlockMirror">on</P>
+    <P Name="NameLocation">top</P>
+    <P Name="Gain">Ae</P>
+    <P Name="Multiplication">Matrix(K*u)</P>
+  </Block>
+  <Block BlockType="Gain" Name="Gain2" SID="38">
+    <P Name="Position">[310, 335, 360, 375]</P>
+    <P Name="ZOrder">16</P>
+    <P Name="Gain">Ce</P>
+    <P Name="Multiplication">Matrix(K*u)</P>
+  </Block>
+  <Block BlockType="Gain" Name="Gain3" SID="39">
+    <P Name="Position">[210, 265, 260, 305]</P>
+    <P Name="ZOrder">18</P>
+    <P Name="BlockMirror">on</P>
+    <P Name="NameLocation">top</P>
+    <P Name="Gain">He</P>
+    <P Name="Multiplication">Matrix(K*u)</P>
+  </Block>
+  <Block BlockType="Sum" Name="Sum1" SID="40">
+    <PortCounts in="3" out="1"/>
+    <P Name="Position">[120, 345, 140, 365]</P>
+    <P Name="ZOrder">14</P>
+    <P Name="Inputs">+++</P>
+  </Block>
+  <Block BlockType="Sum" Name="Sum2" SID="41">
+    <PortCounts in="2" out="1"/>
+    <P Name="Position">[375, 275, 395, 295]</P>
+    <P Name="ZOrder">17</P>
+    <P Name="BlockMirror">on</P>
+    <P Name="NameLocation">top</P>
+    <P Name="Inputs">+|-</P>
+  </Block>
+  <Block BlockType="UnitDelay" Name="Unit Delay" SID="42">
+    <P Name="Position">[185, 342, 215, 368]</P>
+    <P Name="ZOrder">15</P>
+    <P Name="SampleTime">Ts</P>
+    <P Name="HasFrameUpgradeWarning">on</P>
+  </Block>
+  <Block BlockType="Outport" Name="y_hat" SID="43">
+    <P Name="Position">[470, 348, 500, 362]</P>
+    <P Name="ZOrder">21</P>
+  </Block>
+  <Block BlockType="Outport" Name="x_hat" SID="44">
+    <P Name="Position">[470, 403, 500, 417]</P>
+    <P Name="ZOrder">22</P>
+    <P Name="Port">2</P>
+  </Block>
+  <Line>
+    <P Name="ZOrder">1</P>
+    <P Name="Src">35#out:1</P>
+    <P Name="Points">[20, 0]</P>
+    <P Name="Dst">41#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">3</P>
+    <P Name="Src">41#out:1</P>
+    <P Name="Dst">39#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">4</P>
+    <P Name="Src">40#out:1</P>
+    <P Name="Dst">42#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">5</P>
+    <P Name="Src">42#out:1</P>
+    <P Name="Points">[43, 0]</P>
+    <Branch>
+      <P Name="ZOrder">6</P>
+      <P Name="Points">[0, 55]</P>
+      <Branch>
+        <P Name="ZOrder">7</P>
+        <P Name="Dst">37#in:1</P>
+      </Branch>
+      <Branch>
+        <P Name="ZOrder">8</P>
+        <P Name="Dst">44#in:1</P>
+      </Branch>
+    </Branch>
+    <Branch>
+      <P Name="ZOrder">9</P>
+      <P Name="Dst">38#in:1</P>
+    </Branch>
+  </Line>
+  <Line>
+    <P Name="ZOrder">10</P>
+    <P Name="Src">38#out:1</P>
+    <P Name="Points">[20, 0]</P>
+    <Branch>
+      <P Name="ZOrder">11</P>
+      <P Name="Dst">41#in:2</P>
+    </Branch>
+    <Branch>
+      <P Name="ZOrder">12</P>
+      <P Name="Dst">43#in:1</P>
+    </Branch>
+  </Line>
+  <Line>
+    <P Name="ZOrder">13</P>
+    <P Name="Src">37#out:1</P>
+    <P Name="Points">[-40, 0]</P>
+    <P Name="Dst">40#in:3</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">14</P>
+    <P Name="Src">34#out:1</P>
+    <P Name="Dst">36#in:1</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">15</P>
+    <P Name="Src">36#out:1</P>
+    <P Name="Dst">40#in:2</P>
+  </Line>
+  <Line>
+    <P Name="ZOrder">17</P>
+    <P Name="Src">39#out:1</P>
+    <P Name="Points">[-75, 0]</P>
+    <P Name="Dst">40#in:1</P>
+  </Line>
+</System>

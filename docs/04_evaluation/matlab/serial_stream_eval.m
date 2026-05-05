@@ -2,7 +2,8 @@ clc, clear all
 %%
 
 port = '/dev/ttyUSB0'; % port = 'COM12';
-baudrate = 2e6;
+%port = '/dev/ttyACM0';
+baudrate = 2e6;.......
 
 
 % Initialize the SerialStream object
@@ -56,6 +57,7 @@ ylim([0 1.2*max(diff(data.time * 1e6))])
 %% Evaluate the data
 
 % ind.servo_commands = 1;
+
 % 
 % figure(2)
 % plot(data.time, data.values(:, ind.servo_commands))
@@ -395,7 +397,880 @@ hold off;
 % save_all_plots('CPSD_dB_Final');
 
 %%
-save_all_plots('chirp_powerhd');
+save_all_plots('PT2 fit MKS');
+
+%%
+clc, clear all, close all;
+
+% Pfade und Einstellungen
+folders = {'chirp_184_lpf', 'chirp_powerhd'};
+labels = {'Chirp 184 LPF', 'Chirp PowerHD'};
+colors = {'r', 'b'}; % Rot für 184, Blau für PowerHD
+
+% Parameter für Spektralanalyse
+Nest_factor = 15; % Fenstergröße in Sekunden
+
+% Daten laden und verarbeiten
+Gest_compare = cell(1,2);
+Cest_compare = cell(1,2);
+
+for i = 1:2
+    filepath = fullfile(folders{i}, 'data_00.mat');
+    
+    if exist(filepath, 'file')
+        fprintf('Lade Daten aus: %s\n', filepath);
+        load(filepath); % Lädt die Variable 'data'
+        
+        % Zeit und Sampling
+        t = data.time;
+        Ts = mean(diff(t));
+        fs = 1/Ts;
+        
+        % Signale (Servo Chirp Input vs. Roll Output)
+        u = data.values(:,3);    % Servo Index 3
+        y = data.values(:,10);   % Roll Index 10
+        
+        % Fenster-Konfiguration
+        Nest = round(Nest_factor / Ts);
+        win = hann(Nest);
+        noverlap = round(0.5 * Nest);
+        
+        % Übertragungsfunktion und Kohärenz schätzen
+        [gest, freq] = tfestimate(u, y, win, noverlap, [], fs);
+        [cest, ~] = mscohere(u, y, win, noverlap, [], fs);
+        
+        % In Frequenzgang-Objekte (FRD) umwandeln
+        Gest_compare{i} = frd(gest, freq, Ts, 'Units', 'Hz');
+        Cest_compare{i} = frd(cest, freq, Ts, 'Units', 'Hz');
+    else
+        warning('Datei nicht gefunden: %s', filepath);
+    end
+end
+
+% Figure 100: Gemeinsamer Bode-Plot
+figure(100)
+clf;
+opts = bodeoptions;
+opts.FreqUnits = 'Hz';
+opts.XLim = [0.1, 80]; % Fokus auf relevanten Frequenzbereich
+opts.Grid = 'on';
+
+% Plotten
+h = bodeplot(Gest_compare{1}, colors{1}, Gest_compare{2}, colors{2}, opts);
+
+% Achsen-Anpassung (Phase auf -360 bis 10 Grad fixieren)
+ax = findall(gcf, 'Type', 'axes');
+if length(ax) >= 2
+    % ax(1) ist meist Phase (unten), ax(2) Magnitude (oben)
+    ylim(ax(1), [-360, 45]); 
+end
+
+title('')
+sgtitle('Vergleich Frequenzgang: 184 LPF vs. PowerHD', 'FontSize', 14, 'FontWeight', 'bold');
+legend(labels, 'Location', 'southwest');
+
+% Figure 101: Gemeinsame Kohärenz
+figure(101)
+clf; hold on;
+for i = 1:2
+    if ~isempty(Cest_compare{i})
+        f_hz = Cest_compare{i}.Frequency;
+        coh = abs(squeeze(Cest_compare{i}.ResponseData));
+        semilogx(f_hz, coh, 'Color', colors{i}, 'LineWidth', 2);
+    end
+end
+grid on; grid minor;
+line([0.1 100], [0.6 0.6], 'Color', [0.5 0.5 0.5], 'LineStyle', '--'); % Güteschwelle
+xlabel('Frequenz (Hz)');
+ylabel('Kohärenz');
+title('Vergleich Kohärenz (Datenqualität)', 'FontWeight', 'bold');
+xlim([0.1, 100]);
+ylim([0, 1.1]);
+legend([labels, 'Grenzwert (0.6)'], 'Location', 'southwest');
+hold off;
+
+%% Plots speichern
+% Nutzt deine existierende Funktion aus dem vorherigen Script
+save_all_plots('Vergleich_Servos');
+
+%% Schrittantwort-Auswertung Servo 1
+% Annahme: 'data' ist bereits geladen oder wird hier geladen
+% load('chirp_184_lpf/data_00.mat'); 
+
+% 1. Signale definieren
+t = data.time;
+u = data.values(:, 1); % current setpoint (soll)
+y = data.values(:, 2);  % actual pos (ist)
+
+
+figure(199)
+% Variante A: Explizite Paare (t, u und t, y)
+plot(t, y, 'LineWidth', 1.5); 
+hold on;
+plot(t, u, 'LineWidth', 1.5, 'LineStyle', '--'); % Sollwert gestrichelt
+hold off;
+
+
+grid on
+xlabel('Zeit (s)')
+ylabel('Position / Kommando') % Einheit anpassen, falls bekannt (z.B. rad oder PWM)
+title('Servo 1: Soll- vs. Ist-Vergleich')
+
+% 2. Zeitbereich für den Sprung auswählen (Anpassen!)
+% Schau in Figure 2 nach, wann ein sauberer Sprung passiert
+t_start = 40; % Beispiel: Sprung bei 5.2 Sekunden
+t_end   = 50; % Ende der Beobachtung
+
+% Index-Maske erstellen
+idx = (t >= t_start) & (t <= t_end);
+
+% Daten ausschneiden und auf t=0 normieren
+% Daten ausschneiden
+t_subset = t(idx); 
+u_step = u(idx);
+y_step = y(idx);
+% Zeit auf 0 normieren
+t_step = t_subset - t_subset(1);
+
+% 3. Offset-Korrektur (optional)
+% Damit die Kurve bei 0 startet, falls gewünscht:
+% y_step = y_step - y_step(1);
+% u_step = u_step - u_step(1);
+
+
+% --- Figure 200: Ausgewählter Zeitraum (Schrittantwort) ---
+figure(200); clf;
+plot(t_step, u_step, 'LineWidth', 2, 'LineStyle', '--'); % Sollwert
+hold on;
+plot(t_step, y_step, 'LineWidth', 2); % Istwert
+hold off;
+
+grid on
+xlabel('Zeit nach Sprung (s)')
+ylabel('Position / Kommando') % Gemeinsame Y-Achse für Soll und Ist
+title(['Schrittantwort Analyse - Start: ', num2str(t_start), 's'])
+legend('Soll-Sprung (Input)', 'Ist-Reaktion (Output)', 'Location', 'southeast')
+
+% 5. Kennwerte (Grob-Schätzung)
+rise_time_idx = find(y_step >= 0.9 * max(y_step), 1);
+if ~isempty(rise_time_idx)
+    fprintf('Grobe Anstiegszeit (90%%): %.3f s\n', t_step(rise_time_idx));
+end
+
+save_all_plots('step2')
+
+%% Schrittantwort-Auswertung 2D (Ball auf Platte)
+% Annahme: 'data' ist bereits geladen (z.B. aus der Telemetrie)
+
+% 1. Signale definieren (basierend auf C++ SerialStream)
+t = data.time;
+x_ist = data.values(:, 1);  % m_spiData.data[0] -> X-Position
+y_ist = data.values(:, 2);  % m_spiData.data[1] -> Y-Position
+u_soll = data.values(:, 3); % current_setpoint -> Soll-Position
+
+% --- Figure 199: Gesamtübersicht ---
+figure(199); clf;
+plot(t, x_ist, 'b', 'LineWidth', 1.5); 
+hold on;
+plot(t, y_ist, 'r', 'LineWidth', 1.5);
+plot(t, u_soll, 'k--', 'LineWidth', 1.5); % Sollwert gestrichelt
+hold off;
+grid on;
+xlabel('Zeit (s)');
+ylabel('Position (mm)');
+title('2D System: Soll- vs. Ist-Vergleich Gesamt');
+legend('X Ist', 'Y Ist', 'Sollwert', 'Location', 'best');
+
+% 2. Zeitbereich für den Sprung auswählen (Anpassen!)
+% Schau im Plot nach, wann ein Sprung stattfindet
+t_start = 10.0; % Beispielwert
+t_end   = 15.0; % Beispielwert
+
+% Index-Maske erstellen und Daten ausschneiden
+idx = (t >= t_start) & (t <= t_end);
+
+t_subset = t(idx); 
+u_step = u_soll(idx);
+x_step = x_ist(idx);
+y_step = y_ist(idx);
+
+% Zeit auf 0 normieren
+t_step = t_subset - t_subset(1);
+
+% --- Figure 200: Ausgewählter Zeitraum (Schrittantwort) ---
+figure(200); clf;
+plot(t_step, u_step, 'k--', 'LineWidth', 2); 
+hold on;
+plot(t_step, x_step, 'b', 'LineWidth', 2); 
+plot(t_step, y_step, 'r', 'LineWidth', 2); 
+hold off;
+grid on;
+xlabel('Zeit nach Sprung (s)');
+ylabel('Position (mm)');
+title(['2D Schrittantwort Analyse - Start: ', num2str(t_start), 's']);
+legend('Soll-Sprung', 'X Reaktion', 'Y Reaktion', 'Location', 'southeast');
+
+% 3. Kennwerte (Grob-Schätzung)
+% Wir nutzen den ersten und letzten Sollwert im Ausschnitt, um die Sprunghöhe zu ermitteln
+start_val = u_step(1);
+final_val = u_step(end);
+step_size = final_val - start_val;
+
+if abs(step_size) > 0.1 % Nur auswerten, wenn wirklich ein nennenswerter Sprung vorliegt
+    fprintf('--- Kennwerte für Sprung von %.1f auf %.1f mm ---\n', start_val, final_val);
+    
+    % --- Auswertung X-Achse ---
+    x_rise_idx = find(abs(x_step - start_val) >= 0.9 * abs(step_size), 1);
+    if ~isempty(x_rise_idx)
+        fprintf('X-Achse Anstiegszeit (90%%): %.3f s\n', t_step(x_rise_idx));
+    end
+    
+    x_overshoot = (max(abs(x_step - start_val)) / abs(step_size) * 100) - 100;
+    if x_overshoot > 0
+        fprintf('X-Achse Überschwingen:      %.1f %%\n', x_overshoot);
+    end
+    
+    % --- Auswertung Y-Achse ---
+    y_rise_idx = find(abs(y_step - start_val) >= 0.9 * abs(step_size), 1);
+    if ~isempty(y_rise_idx)
+        fprintf('Y-Achse Anstiegszeit (90%%): %.3f s\n', t_step(y_rise_idx));
+    end
+    
+    y_overshoot = (max(abs(y_step - start_val)) / abs(step_size) * 100) - 100;
+    if y_overshoot > 0
+        fprintf('Y-Achse Überschwingen:      %.1f %%\n', y_overshoot);
+    end
+    fprintf('------------------------------------------------\n');
+end
+
+
+%% test
+
+% 1. Signale definieren
+t          = data.time; 
+z_est_now  = data.values(:, 1); % 1: Geschätzte Höhe in mm
+vz_est_now = data.values(:, 2); % 2: Geschätzte Geschwindigkeit in mm/s
+h_plate    = data.values(:, 3); % 3: Plattenhöhe in mm
+
+% 2. Fenster vorbereiten
+figure('Name', 'Bouncing Controller Log', 'Color', 'white');
+
+% 3. Plot 1: Positionen (Ball vs. Platte)
+subplot(2, 1, 1);
+plot(t, z_est_now, 'b', 'LineWidth', 1.5);
+hold on;
+plot(t, h_plate, 'r', 'LineWidth', 1.5);
+hold off;
+grid on;
+title('Höhenverlauf: Geschätzte Ballhöhe vs. Platte');
+ylabel('Höhe [mm]');
+legend('z_{est} (Ball)', 'h_{plate} (Platte)', 'Location', 'best');
+
+% 4. Plot 2: Geschwindigkeit
+subplot(2, 1, 2);
+plot(t, vz_est_now, 'g', 'LineWidth', 1.5);
+grid on;
+title('Geschätzte Ballgeschwindigkeit');
+xlabel('Zeit'); % Je nach Format in Sekunden oder Millisekunden
+ylabel('Geschwindigkeit [mm/s]');
+legend('vz_{est}', 'Location', 'best');
+
+%% 
+% 1. Signale definieren (Indizes evtl. +1 verschieben, falls time in data.values ist!)
+t              = data.time; 
+z_est_now      = data.values(:, 1); % 1: Ballhöhe [mm]
+vz_est_now     = data.values(:, 2); % 2: Ballgeschwindigkeit [mm/s]
+h_plate        = data.values(:, 3); % 3: Plattenhöhe [mm]
+v_plate        = data.values(:, 4); % 4: Platte Ist-Geschw. [mm/s]
+v_target_final = data.values(:, 5); % 5: Platte Soll-Geschw. [mm/s]
+
+% 2. Fenster vorbereiten
+figure('Name', 'Bouncing Analysis', 'Color', 'white', 'Position', [100, 100, 800, 800]);
+
+% 3. Plot 1: Positionen (Wann passiert der Impact?)
+subplot(3, 1, 1);
+plot(t, z_est_now, 'b', 'LineWidth', 1.5); hold on;
+plot(t, h_plate, 'r', 'LineWidth', 1.5); hold off;
+grid on;
+title('Höhenverlauf'); ylabel('Höhe [mm]');
+legend('Ball Z', 'Platte Z', 'Location', 'best');
+
+% 4. Plot 2: Ball-Geschwindigkeit
+subplot(3, 1, 2);
+plot(t, vz_est_now, 'g', 'LineWidth', 1.5);
+grid on;
+title('Ballgeschwindigkeit'); ylabel('v [mm/s]');
+legend('Ball Vz', 'Location', 'best');
+
+% 5. Plot 3: NEU - Platten-Performance (Ist vs. Soll)
+subplot(3, 1, 3);
+plot(t, v_plate, 'r', 'LineWidth', 1.5); hold on;
+plot(t, v_target_final, 'k--', 'LineWidth', 1.5); hold off;
+grid on;
+title('Platten-Geschwindigkeit beim Schlag'); 
+xlabel('Zeit'); ylabel('v [mm/s]');
+legend('Platte Ist-Geschwindigkeit', 'Zielgeschwindigkeit (Max)', 'Location', 'best');
+
+%% 3D Bouncing Debugging Plot
+% 1. Signale extrahieren
+t          = data.time; 
+z_ball     = data.values(:, 1);  % Z Ball [mm]
+h_plate    = data.values(:, 3);  % Z Platte [mm]
+x_ball     = data.values(:, 4);  % X Ball [mm]
+y_ball     = data.values(:, 5);  % Y Ball [mm]
+pitch_deg  = data.values(:, 6);  % Pitch [Grad]
+roll_deg   = data.values(:, 7);  % Roll [Grad]
+
+% 2. Visualisierung
+fig = figure('Name', 'Bouncing Debugger', 'Color', 'white', 'Position', [50, 50, 900, 900]);
+
+% Subplot 1: Z-Achse (Timing Check)
+subplot(4, 1, 1);
+plot(t, z_ball, 'b', t, h_plate, 'r', 'LineWidth', 1.2);
+grid on; title('Z-Achse: Timing des Einschlags');
+ylabel('Höhe [mm]'); legend('Ball', 'Platte');
+
+% Subplot 2: X/Y-Positionen (Drift)
+subplot(4, 1, 2);
+plot(t, x_ball, 'm', t, y_ball, 'c', 'LineWidth', 1.2);
+grid on; title('Horizontale Position');
+ylabel('Pos [mm]'); legend('X-Ball', 'Y-Ball');
+
+% Subplot 3: Pitch vs. X (Vorzeichen-Check)
+% Wenn X > 0 (Ball rechts), sollte Pitch so reagieren, dass der Ball nach links beschleunigt wird.
+subplot(4, 1, 3);
+yyaxis left
+plot(t, x_ball, 'm-', 'LineWidth', 1.0); ylabel('X-Position [mm]');
+yyaxis right
+plot(t, pitch_deg, 'k-', 'LineWidth', 1.2); ylabel('Pitch [deg]');
+grid on; title('Korrektur-Check: Reagiert Pitch korrekt auf X?');
+
+% Subplot 4: Roll vs. Y (Vorzeichen-Check)
+subplot(4, 1, 4);
+yyaxis left
+plot(t, y_ball, 'c-', 'LineWidth', 1.0); ylabel('Y-Position [mm]');
+yyaxis right
+plot(t, roll_deg, 'k-', 'LineWidth', 1.2); ylabel('Roll [deg]');
+grid on; title('Korrektur-Check: Reagiert Roll korrekt auf Y?');
+xlabel('Zeit [s]');
+
+
+%%
+% 1. Signale definieren (Indizes anpassen falls 'time' mit in values ist)
+t          = data.time; 
+z_est_now  = data.values(:, 1); % Ball Z [mm]
+h_plate    = data.values(:, 3); % Platte Z [mm]
+v_plate    = data.values(:, 4); % Platte v [mm/s]
+
+% 2. Fenster vorbereiten
+figure('Name', 'Bounce Timing Analysis', 'Color', 'white');
+
+% 3. Linke Y-Achse (Positionen in mm)
+yyaxis left
+plot(t, z_est_now, 'b', 'LineWidth', 1.5); hold on;
+plot(t, h_plate, 'r', 'LineWidth', 2);
+ylabel('Höhe [mm]');
+ylim([-20 500]); % Achse fixieren, damit die Platte unten gut sichtbar ist
+
+% 4. Rechte Y-Achse (Geschwindigkeit in mm/s)
+yyaxis right
+plot(t, v_plate, 'g', 'LineWidth', 1.5);
+ylabel('Geschwindigkeit Platte [mm/s]');
+ylim([-100 2000]); % Skala anpassen, Vmax ist ja meist bei 1000-1500
+
+% 5. Formatierung
+title('Timing-Check: Wann trifft der Ball die schlagende Platte?');
+xlabel('Zeit [s]');
+legend('Ball Z (Links)', 'Platte Z (Links)', 'Platte v (Rechts)', 'Location', 'northwest');
+grid on;
+hold off;
+
+%% camera test
+t = data.time;          % Zeit-Array laden
+y = data.values(:, 2);  % actual pos (ist)
+
+% Standardabweichung (das durchschnittliche Rauschen) berechnen
+rauschen_std = std(y);
+fprintf('Durchschnittliches Rauschen (1 Sigma): %.5f\n', rauschen_std);
+
+R_gemessen = var(y);
+
+% Signal zentrieren (Mittelwert abziehen)
+y_centered = y - mean(y);
+fprintf('Varianz (1 Sigma): %.5f\n', R_gemessen);
+
+figure(202); clf;
+
+% --- 1. Achse (unten) für die Zeit ---
+ax1 = axes;
+plot(ax1, t, y_centered, 'b'); 
+grid on;
+xlabel(ax1, 'Zeit (s)');
+ylabel(ax1, 'Abweichung');
+title(ax1, ['Kamera Rauschen (Std: ', num2str(rauschen_std), ')']);
+
+% WICHTIG: X-Limit exakt auf Anfang und Ende der Zeit setzen
+ax1.XLim = [t(1), t(end)]; 
+
+% --- 2. Achse (oben) für die Samples ---
+% Erstellt eine unsichtbare zweite Achse exakt über der ersten
+%ax2 = axes('Position', ax1.Position, ...
+%           'XAxisLocation', 'top', ...     % X-Achse nach oben
+%           'YAxisLocation', 'right', ...   % Y-Achse nach rechts (wird versteckt)
+%           'Color', 'none');               % Hintergrund transparent machen
+
+% WICHTIG: X-Limit exakt auf 1 bis zur Anzahl der Datenpunkte setzen
+%ax2.XLim = [1, length(y)];
+%ax2.YLim = ax1.YLim; % Y-Skalierung synchronisieren
+%ax2.YTick = [];      % Rechte Y-Beschriftung verstecken
+
+%xlabel(ax2, 'Datenpunkte (Samples)');
+
+
+figure(203); clf;
+
+plot(t, y, 'b', 'LineWidth', 2); % dickere Linie
+grid on;
+
+xlabel('Zeit (s)', 'FontSize', 14);
+ylabel('Absolute Position (mm)', 'FontSize', 14);
+title(sprintf('Originales Kamera-Signal (Mittelwert: %.2f)', mean(y)), ...
+      'FontSize', 16);
+
+set(gca, 'FontSize', 13); % Achsen-Zahlen größer
+save_all_plots('kamera_rauschen')
+
+%% jitter
+% Daten extrahieren
+t = data.time;                         % Zeit-Array (s)
+proc_time_vision = data.values(:, 3);  % Processing time (vermutlich in ms)
+fps_vision       = data.values(:, 4);  % FPS vision (Hz)
+update_interval  = data.values(:, 6);  % Sensor Update Interval in C++ (Mikrosekunden)
+
+% 2. Zeitbereich für den Sprung auswählen (Anpassen!)
+% Schau in Figure 2 nach, wann ein sauberer Sprung passiert
+t_start = 40; % Beispiel: Sprung bei 5.2 Sekunden
+t_end   = 43; % Ende der Beobachtung
+
+% Index-Maske erstellen
+idx = (t >= t_start) & (t <= t_end);
+
+% Daten ausschneiden und auf t=0 normieren
+% Daten ausschneiden
+t = t(idx); 
+proc_time_vision = proc_time_vision(idx);
+fps_vision = fps_vision(idx);
+update_interval = update_interval(idx);
+% Zeit auf 0 normieren
+t_step = t - t(1);
+
+% (Optional) Mikrosekunden in Millisekunden umrechnen für leichtere Lesbarkeit
+update_interval_ms = update_interval / 1000.0; 
+
+% Neues Fenster öffnen
+figure(300); clf;
+
+% --- Plot 1: Processing Time Vision ---
+subplot(3, 1, 1);
+plot(t, proc_time_vision, 'b', 'LineWidth', 1.2);
+grid on;
+ylabel('Zeit (ms)');
+title('Vision Processing Time (Python)');
+legend('Processing Time', 'Location', 'best');
+xlim([t(1) t(end)]);
+
+% --- Plot 2: Kamera FPS ---
+subplot(3, 1, 2);
+plot(t, fps_vision, 'g', 'LineWidth', 1.2);
+grid on;
+ylabel('Frequenz (Hz)');
+title('Kamera Framerate (Python)');
+legend('FPS', 'Location', 'best');
+xlim([t(1) t(end)]);
+
+% --- Plot 3: Sensor Update Interval (C++ Jitter) ---
+subplot(3, 1, 3);
+plot(t, update_interval_ms, 'r', 'LineWidth', 1.2);
+grid on;
+xlabel('Zeit (s)');
+ylabel('Intervall (ms)'); 
+title('Sensor Update Intervall im C++ Regler (Jitter)');
+legend('Update Intervall', 'Location', 'best');
+xlim([t(1) t(end)]);
+
+% Haupttitel für die gesamte Figure
+sgtitle('Analyse: Timing und Jitter', 'FontSize', 14, 'FontWeight', 'bold');
+
+
+% einzelne plots
+
+% --- Figure 301: Processing Time Vision ---
+figure(301); clf;
+plot(t, proc_time_vision, 'b', 'LineWidth', 1.5);
+grid on;
+xlabel('Zeit (s)');
+ylabel('Zeit (ms)');
+title('Vision Processing Time (Python)');
+legend('Processing Time', 'Location', 'best');
+xlim([t(1) t(end)]);
+set(gca, 'FontSize', 12); % Etwas größere Schrift für bessere Lesbarkeit
+
+% --- Figure 302: Kamera FPS ---
+figure(302); clf;
+plot(t, fps_vision, 'g', 'LineWidth', 1.5);
+grid on;
+xlabel('Zeit (s)');
+ylabel('Frequenz (Hz)');
+title('Kamera Framerate (Python)');
+legend('FPS', 'Location', 'best');
+xlim([t(1) t(end)]);
+set(gca, 'FontSize', 12);
+
+% --- Figure 303: Sensor Update Interval (C++ Jitter) ---
+figure(303); clf;
+plot(t, update_interval_ms, 'r', 'LineWidth', 1.5);
+grid on;
+xlabel('Zeit (s)');
+ylabel('Intervall (ms)'); 
+title('Sensor Update Intervall im C++ Regler (Jitter)');
+legend('Update Intervall', 'Location', 'best');
+xlim([t(1) t(end)]);
+set(gca, 'FontSize', 12);
+
+% --- Figure 304: Kamera FPS als Intervall ---
+figure(304); clf;
+plot(t, 1000 ./ fps_vision, 'g', 'LineWidth', 1.5); % <-- Hier ist der Punkt wichtig!
+grid on;
+xlabel('Zeit (s)');
+ylabel('Intervall (ms)');
+title('Kamera Framerate als Intervall (Python)');
+legend('Intervall', 'Location', 'best');
+xlim([t(1) t(end)]);
+set(gca, 'FontSize', 12);
+
+%
+% --- Figure 305: Vergleich Kamera-Intervall vs. C++ Jitter ---
+figure(305); clf;
+hold on; % WICHTIG: Erlaubt das Zeichnen mehrerer Graphen in einem Plot
+
+% Beide Linien zeichnen
+plot(t, 1000 ./ fps_vision, 'g', 'LineWidth', 1.5);
+plot(t, update_interval_ms, 'r', 'LineWidth', 1.5);
+
+grid on;
+xlabel('Zeit (s)');
+ylabel('Intervall (ms)');
+title('Vergleich: Kamera Intervall (Python) vs. Sensor Update (C++)');
+
+% Legende hinzufügen (Reihenfolge entspricht den plot-Aufrufen)
+legend('Kamera Intervall (Python)', 'Update Intervall (C++)', 'Location', 'best');
+
+% X-Achse exakt auf die Messdauer begrenzen
+xlim([t(1) t(end)]);
+set(gca, 'FontSize', 12);
+
+hold off; % Hold on wieder ausschalten für zukünftige Plots
+%%
+save_all_plots(['z-kompensation final'])
+
+
+
+%% Static (steady-state) kalman filter
+
+g = 9810;
+% 3*g * u = 5 * ddx
+A = [[0 1]; [0 0]];
+B = [0; 3/5*g];
+C = [1 0];
+% D = 0;
+Ts = 0.001;
+Tt = 0.016; % muss in ms angegeben werden
+delay_steps = round(Tt * 1000);
+
+
+% euler discretization, could also be zoh
+A = eye(size(A)) + Ts * A;
+B = Ts * B;
+
+% % zoh
+% M = expm([A, B; zeros(1,3)] * Ts);
+% A = M(1:2,1:2);
+% B = M(1:2,3);
+
+% static kalman-filter ohne Tt
+%R = 0.001 / Ts; % tune here
+%varianz_stillstand = 0.00011;
+%R = varianz_stillstand * 250;
+% Q = B * B.' * 1 * Ts;
+%Q = diag([0.1 500]);
+%H = dlqr(A.', C.', Q, R).';
+
+% static kalman-filter
+R = 0.001 / Ts; % tune here
+varianz_stillstand = 0.00011;
+R = varianz_stillstand * 250;
+% Q = B * B.' * 1 * Ts;
+Q = diag([0.1 170]);
+H = dlqr(A.', C.', Q, R).';
+
+% extend with disturbance input
+Ae = [[A, B]; [0, 0, 1]];
+Be = [B; 0];
+Ce = [C, 0];
+
+% static kalman-filter for with input disturbance estimator
+Qe = Q;
+Qe(3,3) = 1e-2; % you need to add the penalty for the disturbance extra!
+He = dlqr(Ae.', Ce.', Qe, R).';
+
+% position sensor runs 20-times slower
+Ts_pos = 20 * Ts;
+
+G_DT1 = c2d(tf([1 0], [1/(2*pi*1) 1]), Ts, 'tustin');
+
+% - you can also formulate output disturbances
+% - you can also formulate the disturbance dynamics not as integrator but
+%   as a lowpass type, this sometimes helps with observability
+
+% 1. Einheiten für die Berechnung anpassen (SI-Einheiten)
+t          = data.time; 
+kamera_t   = t - Tt;
+x_ball_m   = data.values(:, 1);  % mm
+pitch_rad  = data.values(:, 6); %* pi / 180;  % Grad in Radiant umrechnen
+
+% 2. Speicher und Initialisierung
+% Setze den Startzustand auf die erste echte Position, Geschwindigkeit = 0
+x_hat_x   = [x_ball_m(1); 0]; 
+pos_x_est = zeros(size(t));
+vel_x_est = zeros(size(t));
+
+% Wir füllen die Historie initial mit dem Startwert auf, damit es am 
+% Anfang keine harten Sprünge von Null gibt.
+x_hist = repmat(x_hat_x, 1, delay_steps); % Matrix 2 x 16
+u_hist = zeros(1, delay_steps);           % Vektor 1 x 16
+
+% 3. Filter-Schleife für reale Daten
+for k = 1:length(t)
+    
+    % Prädiktion mit dem echten geloggten Stellsignal (Winkel)
+    u_k = pitch_rad(k); 
+    x_hat_x = A * x_hat_x + B * u_k; 
+
+    % -- HISTORIE AKTUALISIEREN ---
+    x_hist = [x_hist(:, 2:end), x_hat_x];
+    u_hist = [u_hist(2:end), u_k];
+    
+
+    % data ist mit 1ms geloggt, Kamera liefert alle 20ms neue Werte.
+    if mod(k, 20) == 0 && k > delay_steps
+        y_meas = x_ball_m(k);
+
+        % a) Zustand aus der Vergangenheit holen (Index 1 = exakt vor 16 ms)
+        x_delayed = x_hist(:, 1);
+        
+        % b) Kalman-Update auf diesen ALTEN Zustand anwenden
+        y_err = y_meas - (C * x_delayed);
+        x_delayed = x_delayed + H * y_err;
+        
+        % In der Historie den korrigierten Startpunkt überschreiben
+        x_hist(:, 1) = x_delayed;
+
+        % c) ROLLBACK: Die verlorenen 15 Schritte wieder aufholen
+        for i = 1:(delay_steps - 1)
+            u_old = u_hist(i);
+            
+            % Wieder von Schritt zu Schritt integrieren
+            x_delayed = A * x_delayed + B * u_old;
+            
+            % Die korrigierte Geschichte für künftige Updates speichern
+            x_hist(:, i+1) = x_delayed;
+        end
+        
+        % d) Gegenwart updaten: Der frisch aufgerollte Zustand 
+        % wird zu unserer neuen Realität.
+        x_hat_x = x_delayed;
+
+        %x_hat_x = x_hat_x + H * (y_meas - C * x_hat_x);
+    end
+    
+    % Werte für den Plot wegschreiben
+    pos_x_est(k) = x_hat_x(1);
+    vel_x_est(k) = x_hat_x(2);
+end
+
+% Plotting und speichern
+figure(111)
+plot(t, x_ball_m, 'g.', t, pos_x_est, 'r', 'LineWidth', 1.5)
+title('Kalman-Filter: X-Position (Reale Daten)')
+legend('Gemessene Kamera (m)', 'Kalman Schätzung (m)')
+grid on
+
+%% Automatisches Kalman-Tuning via fminbnd
+
+% 1. Erschaffe die "perfekte Wahrheit" (Offline-Glättung)
+x_ball_perfect = smoothdata(x_ball_m, 'sgolay', 150); 
+
+% 2. Der Optimierer fminbnd sucht den besten Q-Wert in einem festen Bereich
+disp('Starte automatisches Tuning... Bitte warten.');
+options = optimset('Display', 'iter', 'TolX', 1e-2);
+
+% Suchbereich für Q(2,2): von 0.1 bis 5000
+q_lower = 0.1;
+q_upper = 5000;
+
+% Wir suchen das optimale q_vel
+q_vel_optimal = fminbnd(@(q_opt) evaluate_kalman(q_opt, x_ball_m, pitch_rad, x_ball_perfect, A, B, C, R, delay_steps), q_lower, q_upper, options);
+
+fprintf('\n>>> Das optimale Q(2,2) ist: %.2f <<<\n\n', q_vel_optimal);
+
+% --- Die Kostenfunktion ---
+function error_cost = evaluate_kalman(q_vel_test, x_ball_m, pitch_rad, x_perfect, A, B, C, R, delay_steps)
+    
+    % 1. Berechne H für dieses spezifische Q
+    Q_test = diag([0.1, q_vel_test]);
+    H_test = dlqr(A.', C.', Q_test, R).';
+    
+    % 2. Führe den Filter aus 
+    x_hat = [x_ball_m(1); 0];
+    pos_est = zeros(length(x_ball_m), 1);
+    x_hist = repmat(x_hat, 1, delay_steps);
+    u_hist = zeros(1, delay_steps);
+    
+    for k = 1:length(x_ball_m)
+        u_k = pitch_rad(k);
+        x_hat = A * x_hat + B * u_k;
+        
+        x_hist = [x_hist(:, 2:end), x_hat];
+        u_hist = [u_hist(2:end), u_k];
+        
+        if mod(k, 20) == 0 && k > delay_steps
+            x_delayed = x_hist(:, 1);
+            x_delayed = x_delayed + H_test * (x_ball_m(k) - C * x_delayed);
+            x_hist(:, 1) = x_delayed;
+            
+            for i = 1:(delay_steps - 1)
+                x_delayed = A * x_delayed + B * u_hist(i);
+                x_hist(:, i+1) = x_delayed;
+            end
+            x_hat = x_delayed;
+        end
+        pos_est(k) = x_hat(1);
+    end
+    
+    % 3. Berechne den Fehler mit ZEITVERSATZ (Phase Alignment)
+    start_idx = 500; 
+    valid_end = length(pos_est) - delay_steps; % Damit wir nicht über das Array-Ende hinausschießen
+    
+    % pos_est(k) ist die Gegenwart. x_perfect(k + delay_steps) ist die Offline-Wahrheit für diese Gegenwart.
+    error_cost = sum((pos_est(start_idx:valid_end) - x_perfect(start_idx + delay_steps : valid_end + delay_steps)).^2);
+end
+
+%%
+% --- Daten importieren ---
+t          = data.time;               % Zeit-Array (s)
+x_ball     = data.values(:, 1);       % X Ball Istwert [mm]
+y_ball     = data.values(:, 2);       % Y Ball Istwert [mm]
+% z_ball   = data.values(:, 3);       % Z Ball Istwert [mm] (falls gefixt)
+
+sp_x       = data.values(:, 4);       % X Ball Sollwert [mm]
+sp_y       = data.values(:, 5);       % Y Ball Sollwert [mm]
+
+% --- 1. Setpoint-Änderungen (Phasen) automatisch erkennen ---
+% Finde Stellen, an denen der Sollwert springt (Schwelle 0.1 mm)
+dp = abs(diff(sp_x)) + abs(diff(sp_y));
+step_idx = find(dp > 0.1); 
+
+% Start- und Endpunkt der gesamten Messung hinzufügen
+step_idx = [1; step_idx; length(t)];
+
+%%--- 2. Metriken pro Phase berechnen ---
+num_phases = length(step_idx) - 1;
+results_x = zeros(num_phases, 3); % [Mean_Error, Std_Dev, P2P]
+results_y = zeros(num_phases, 3);
+
+figure('Name', 'Multi-Setpoint Regler Auswertung', 'Color', 'w', 'Position', [100, 100, 1000, 800]);
+
+% X-Achse Plot vorbereiten
+ax1 = subplot(2,1,1); hold on; grid on;
+plot(t, x_ball, 'b', 'LineWidth', 1.2, 'DisplayName', 'Istwert X');
+plot(t, sp_x, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Sollwert X');
+title('X-Achse: Dynamische Setpoint-Auswertung');
+xlabel('Zeit [s]'); ylabel('X Position [mm]');
+
+% Y-Achse Plot vorbereiten
+ax2 = subplot(2,1,2); hold on; grid on;
+plot(t, y_ball, 'k', 'LineWidth', 1.2, 'DisplayName', 'Istwert Y');
+plot(t, sp_y, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Sollwert Y');
+title('Y-Achse: Dynamische Setpoint-Auswertung');
+xlabel('Zeit [s]'); ylabel('Y Position [mm]');
+
+% Durch alle gefundenen Phasen iterieren
+valid_phases = 0;
+for i = 1:num_phases
+    start_i = step_idx(i) + 1;
+    end_i   = step_idx(i+1);
+    
+    seg_len = end_i - start_i;
+    
+    % Ignoriere extrem kurze Phasen (Rauschen oder fehlerhafte Steps)
+    if seg_len < 50 
+        continue; 
+    end
+    valid_phases = valid_phases + 1;
+    
+    % Stationären Bereich definieren (letzte 40% der jeweiligen Phase)
+    ss_start = start_i + round(seg_len * 0.6);
+    ss_idx   = ss_start:end_i;
+    
+    t_ss     = t(ss_idx);
+    
+    % Metriken berechnen (X)
+    error_x_ss = x_ball(ss_idx) - sp_x(ss_idx);
+    results_x(valid_phases, 1) = mean(error_x_ss);        % Bleibende Abweichung
+    results_x(valid_phases, 2) = std(x_ball(ss_idx));     % Schwingung
+    results_x(valid_phases, 3) = max(x_ball(ss_idx)) - min(x_ball(ss_idx)); % Peak-to-Peak
+    
+    % Metriken berechnen (Y)
+    error_y_ss = y_ball(ss_idx) - sp_y(ss_idx);
+    results_y(valid_phases, 1) = mean(error_y_ss);
+    results_y(valid_phases, 2) = std(y_ball(ss_idx));
+    results_y(valid_phases, 3) = max(y_ball(ss_idx)) - min(y_ball(ss_idx));
+    
+    % Auswertungsfenster im Plot grün hinterlegen (X)
+    %patch(ax1, [t_ss(1) t_ss(end) t_ss(end) t_ss(1)], ...
+    %      [min(x_ball)-10 min(x_ball)-10 max(x_ball)+10 max(x_ball)+10], ...
+    %      'g', 'FaceAlpha', 0.15, 'EdgeColor', 'none', 'HandleVisibility', 'off');
+          
+    % Auswertungsfenster im Plot grün hinterlegen (Y)
+    %patch(ax2, [t_ss(1) t_ss(end) t_ss(end) t_ss(1)], ...
+    %      [min(y_ball)-10 min(y_ball)-10 max(y_ball)+10 max(y_ball)+10], ...
+    %      'g', 'FaceAlpha', 0.15, 'EdgeColor', 'none', 'HandleVisibility', 'off');
+end
+
+% Legenden hinzufügen
+legend(ax1, 'show'); legend(ax2, 'show');
+
+% --- 3. Globale Auswertung in der Konsole ---
+% Nullen am Ende abschneiden (falls Phasen übersprungen wurden)
+results_x = results_x(1:valid_phases, :);
+results_y = results_y(1:valid_phases, :);
+
+fprintf('\n=== GLOBALE REGLER-AUSWERTUNG (%d Setpoints getestet) ===\n', valid_phases);
+fprintf('---------------------- X-ACHSE ----------------------\n');
+fprintf('Mittlere bleibende Abweichung: %8.3f mm\n', mean(abs(results_x(:, 1))));
+fprintf('Mittlere Schwingung (Sigma):   %8.3f mm\n', mean(results_x(:, 2)));
+fprintf('Maximales schwingen (P2P Max):   %8.3f mm\n', max(results_x(:, 3)));
+
+fprintf('\n---------------------- Y-ACHSE ----------------------\n');
+fprintf('Mittlere bleibende Abweichung: %8.3f mm\n', mean(abs(results_y(:, 1))));
+fprintf('Mittlere Schwingung (Sigma):   %8.3f mm\n', mean(results_y(:, 2)));
+fprintf('Maximales schwingen (P2P Max):   %8.3f mm\n', max(results_y(:, 3)));
+fprintf('=====================================================\n');
+
+
+%%
+save_all_plots('PT2 fit POWERHD');
+
 %%
 
 function save_all_plots(prefix)
@@ -419,26 +1294,26 @@ function save_all_plots(prefix)
             ax = allAxes(j);
             
             % Achsen-Zahlen (Ticks)
-            set(ax, 'FontSize', 12, 'FontWeight', 'bold');
+            set(ax, 'FontSize', 16, 'FontWeight', 'bold');
             
             % --- TITEL ERZWINGEN ---
             % Wir greifen direkt auf das Title-Objekt der Achse zu
-            set(ax.Title, 'FontSize', 16, 'FontWeight', 'bold', 'Visible', 'on');
+            set(ax.Title, 'FontSize', 26, 'FontWeight', 'bold', 'Visible', 'on');
             
             % Auch X- und Y-Labels vergrößern (wichtig für Bode-Achsen)
-            set(ax.XLabel, 'FontSize', 13, 'FontWeight', 'bold');
-            set(ax.YLabel, 'FontSize', 13, 'FontWeight', 'bold');
+            set(ax.XLabel, 'FontSize', 20, 'FontWeight', 'bold');
+            set(ax.YLabel, 'FontSize', 20, 'FontWeight', 'bold');
         end
         
         % 3. Super-Title (sgtitle) finden
         % Dieser Titel steht über beiden Bode-Plots
         allSg = findall(fig, 'Tag', 'suptitle'); 
         if ~isempty(allSg)
-            set(allSg, 'FontSize', 18, 'FontWeight', 'bold');
+            set(allSg, 'FontSize', 26, 'FontWeight', 'bold');
         end
         
         % 4. Legenden
-        set(findobj(fig, 'Type', 'legend'), 'FontSize', 14, 'FontWeight', 'bold');
+        set(findobj(fig, 'Type', 'legend'), 'FontSize', 20, 'FontWeight', 'bold');
         
         % Speichern
         filename = sprintf('Results/%s_Fig%d.png', prefix, figNum);

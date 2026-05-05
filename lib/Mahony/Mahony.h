@@ -29,6 +29,13 @@ public:
 private:
     float m_kp = 0.0f;
     float m_ki = 0.0f;
+
+    // // double real pole
+    // float w0 = 2;
+    // float m_kp = w0 / sqrt(3.0f) / 2.0f;
+    // float m_ki = m_kp * m_kp / 3;
+
+
     float m_Ts = 1.0f;
     Eigen::Quaternionf m_quat;
     Eigen::Vector3f m_bias;

@@ -1,0 +1,73 @@
+%%
+% leitfaden Bilder speichern für Doku
+
+%Phasewrapping unter: rechtsklick in diagramm > options > wrap phase at
+%-180, dazu in limits > y-limits bei phase auf -180 180
+
+% evtl ändert der save_all_plots code nicht alle Schriftgrössen, deshalb
+% auhc in den originalen figue optionenn einstellen:
+
+%plotOpts.Title.FontSize = 26;
+plotOpts.Title.FontWeight = 'bold';
+plotOpts.XLabel.FontSize = 20;
+plotOpts.XLabel.FontWeight = 'bold';
+plotOpts.YLabel.FontSize = 20;
+plotOpts.YLabel.FontWeight = 'bold';
+plotOpts.TickLabel.FontSize = 20;
+plotOpts.TickLabel.FontWeight = 'bold';
+
+
+%%
+save_all_plots('PT2 fit MKS');
+
+%%
+
+function save_all_plots(prefix)
+    if nargin < 1, prefix = 'Plot'; end
+    
+    if ~exist('Results', 'dir'), mkdir('Results'); end
+    
+    figHandles = findobj('Type', 'figure');
+    
+    for i = 1:length(figHandles)
+        fig = figHandles(i);
+        figNum = fig.Number;
+        
+        % 1. Liniendicke (2.0 für gute Sichtbarkeit im Bericht)
+        set(findobj(fig, 'Type', 'line'), 'LineWidth', 2.0);
+        
+        % 2. Alle Achsen-Objekte finden (beim Bode sind das zwei!)
+        allAxes = findobj(fig, 'Type', 'axes');
+        
+        for j = 1:length(allAxes)
+            ax = allAxes(j);
+            
+            % Achsen-Zahlen (Ticks)
+            set(ax, 'FontSize', 16, 'FontWeight', 'bold');
+            
+            % --- TITEL ERZWINGEN ---
+            % Wir greifen direkt auf das Title-Objekt der Achse zu
+            set(ax.Title, 'FontSize', 26, 'FontWeight', 'bold', 'Visible', 'on');
+            
+            % Auch X- und Y-Labels vergrößern (wichtig für Bode-Achsen)
+            set(ax.XLabel, 'FontSize', 20, 'FontWeight', 'bold');
+            set(ax.YLabel, 'FontSize', 20, 'FontWeight', 'bold');
+        end
+        
+        % 3. Super-Title (sgtitle) finden
+        % Dieser Titel steht über beiden Bode-Plots
+        allSg = findall(fig, 'Tag', 'suptitle'); 
+        if ~isempty(allSg)
+            set(allSg, 'FontSize', 26, 'FontWeight', 'bold');
+        end
+        
+        % 4. Legenden
+        set(findobj(fig, 'Type', 'legend'), 'FontSize', 20, 'FontWeight', 'bold');
+        
+        % Speichern
+        filename = sprintf('Results/%s_Fig%d.png', prefix, figNum);
+        exportgraphics(fig, filename, 'Resolution', 300);
+        
+        fprintf('Gespeichert: %s (Alles vergrößert)\n', filename);
+    end
+end
