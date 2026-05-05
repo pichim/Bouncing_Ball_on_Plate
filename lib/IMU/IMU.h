@@ -54,8 +54,9 @@ private:
 
     uint16_t m_skip_cntr{0};
     uint16_t m_avg_cntr{0};
-    Eigen::Vector3f m_gyro_offset;
-    Eigen::Vector3f m_acc_offset;
+    Eigen::Vector3f m_gyro_offset;   // gyro bias
+    Eigen::Vector3f m_acc_offset;    // b vector
+    Eigen::Matrix3f m_acc_A;         // A matrix
 };
 
 // Convenience alias to use ImuData without qualification

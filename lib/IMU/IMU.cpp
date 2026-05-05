@@ -16,8 +16,20 @@ IMU::IMU(PinName pin_sda,
     m_acc_filter[1].lowPass1Init(BBOP_IMU_ACC_FILTER_FREQUENCY_HZ, Ts);
     m_acc_filter[2].lowPass1Init(BBOP_IMU_ACC_FILTER_FREQUENCY_HZ, Ts);
 
-    m_gyro_offset.setZero();
-    m_acc_offset.setZero();
+   // fixed gyro bias
+    m_gyro_offset << -0.0983f,  0.0913f,  0.0151f;
+
+    // fixed accelerometer offset b
+    m_acc_offset <<  0.0585f, -0.0616f, -0.1592f;
+
+    // fixed accelerometer calibration matrix A
+    m_acc_A <<
+        1.0056f, 0.0f,    0.0f,
+        0.0f,    1.0052f, 0.0f,
+        0.0f,    0.0f,    0.9893f;
+
+    // directly use fixed calibration
+    m_is_calibrated = true;
 
     m_ImuMPU6500.init();
     m_ImuMPU6500.configuration();
@@ -37,36 +49,37 @@ IMU::ImuData IMU::getImuData()
     Eigen::Vector3f gyro(m_ImuMPU6500.getGyroX(), m_ImuMPU6500.getGyroY(), m_ImuMPU6500.getGyroZ());
     Eigen::Vector3f acc(m_ImuMPU6500.getAccX(), m_ImuMPU6500.getAccY(), m_ImuMPU6500.getAccZ());
 
-    if (!m_is_calibrated) {
+    // fixed calibration
+    gyro -= m_gyro_offset;
+    acc   = m_acc_A * (acc - m_acc_offset);
 
-        m_avg_cntr++;
+//     if (!m_is_calibrated) {
 
-        // sum up gyro and acc
-        m_gyro_offset += gyro;
-        m_acc_offset += acc;
+//         m_avg_cntr++;
 
-        // calculate average
-        if (m_avg_cntr == BBOP_IMU_NUM_RUNS_FOR_AVERAGE) {
-            m_is_calibrated = true;
+//         // sum up gyro and acc
+//         m_gyro_offset += gyro;
+//         m_acc_offset += acc;
 
-            m_gyro_offset /= m_avg_cntr;
-            m_acc_offset /= m_avg_cntr;
+//         // calculate average
+//         if (m_avg_cntr == BBOP_IMU_NUM_RUNS_FOR_AVERAGE) {
+//             m_is_calibrated = true;
 
-            // we have to keep gravity in acc z direction
-            m_acc_offset(2) = 0.0f;
+//             m_gyro_offset /= m_avg_cntr;
+//             m_acc_offset /= m_avg_cntr;
 
-            printf("IMU calibrated.\n");
-            printf("Avg. Gyr offset: %.4f, %.4f, %.4f; ...\n", m_gyro_offset(0), m_gyro_offset(1), m_gyro_offset(2));
-            printf("Avg. Acc offset: %.4f, %.4f, %.4f; ...\n", m_acc_offset(0), m_acc_offset(1), m_acc_offset(2));
+//             printf("IMU calibrated.\n");
+//             printf("Avg. Gyr offset: %.4f, %.4f, %.4f; ...\n", m_gyro_offset(0), m_gyro_offset(1), m_gyro_offset(2));
+//             printf("Avg. Acc offset: %.4f, %.4f, %.4f; ...\n", m_acc_offset(0), m_acc_offset(1), m_acc_offset(2));
 
-#if BBOP_IMU_DO_USE_STATIC_ACC_CALIBRATION
-            m_acc_offset = BBOP_IMU_B_ACC;
-#endif
-        }
-    } else {
-        // remove static bias
-        gyro -= m_gyro_offset;
-        acc -= m_acc_offset;
+// #if BBOP_IMU_DO_USE_STATIC_ACC_CALIBRATION
+//             m_acc_offset = BBOP_IMU_B_ACC;
+// #endif
+//         }
+//     } else {
+//         // remove static bias
+//         gyro -= m_gyro_offset;
+//         acc -= m_acc_offset;
 
 #if BBOP_IMU_USE_ADDITIONAL_FILTERS
         if (m_is_first_run) {
@@ -91,8 +104,12 @@ IMU::ImuData IMU::getImuData()
         m_ImuData.acc = acc;
         m_ImuData.quat = m_Mahony.getOrientationAsQuaternion();
         m_ImuData.rpy = m_Mahony.getOrientationAsRPYAngles();
+        // Offsets korrigieren
+        m_ImuData.rpy(0) += (-0.10f +0.7f) * M_PIf / 180.0f;   // roll
+        m_ImuData.rpy(1) += ( 1.90f - 0.93f + 0.12f) * M_PIf / 180.0f;  // pitch
+ 
         m_ImuData.tilt = m_Mahony.getTiltAngle();
-    }
 
-    return m_ImuData;
+    
+        return m_ImuData;
 }

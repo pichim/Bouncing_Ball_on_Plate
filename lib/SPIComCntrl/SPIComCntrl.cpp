@@ -9,12 +9,14 @@ namespace
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
-    constexpr float SERVO1_HOME_DEG = 90.0f + 6.5f; // 96.5°
-    constexpr float SERVO2_HOME_DEG = 90.0f + 9.0f; // 98.5°
+    constexpr float SERVO1_HOME_DEG = 90.0f + 6.5f - 4.0f; // 96.5°
+    constexpr float SERVO2_HOME_DEG = 90.0f + 9.0f + 20.0f - 90.0f; // 98.5°
     constexpr float SERVO3_HOME_DEG = 90.0f - 0.5f; // 90.0°
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 40.0f; 
+
+    bool ball_was_missing = true;
 }
 
 SPIComCntrl::SPIComCntrl()
@@ -50,10 +52,12 @@ SPIComCntrl::SPIComCntrl()
     // m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_D_S, BALL_CTRL_TAU_R_O, m_Ts, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
     m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
     m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, 0.02f, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    // m_ballPosCntrl_x.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
+    // m_ballPosCntrl_y.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
 
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
-    m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
+    m_servoD1.calibratePulseMinMax(SERVO_PULSE_MIN_powerhd, SERVO_PULSE_MAX_powerhd);
     m_servoD2.calibratePulseMinMax(SERVO_PULSE_MIN, SERVO_PULSE_MAX);
 
     if (!m_servoD0.isEnabled()) {
@@ -135,7 +139,7 @@ void SPIComCntrl::executeTask()
         cntr++;
 
         // Prüfen, ob die Zeit für den nächsten Schritt reif ist
-        if (cntr > 500) {  // alle 20 ms ++
+        if (cntr > 300) {  // alle 20 ms ++
             cntr = 0; // Zähler zurücksetzen
             
             // Index für das Array erhöhen
@@ -194,7 +198,9 @@ void SPIComCntrl::executeTask()
 
     if (m_Imu.isCalibrated()) {
         
-        if (((missing_data_counter * m_Ts) <= VISION_TIMEOUT)) {
+        if (((missing_data_counter * m_Ts) <= VISION_TIMEOUT) && (m_spiData.data[2] < 50.0f) && (m_spiData.data[2] > -50.0f)) {
+
+
 
             //sollwert tiefpass
             static constexpr float SETPOINT_TAU = 0.1f * BALL_CTRL_TAU_V; // Tf aus MATLAB (Ca. 1 / w_d)
@@ -202,40 +208,63 @@ void SPIComCntrl::executeTask()
             // Weichzeichnen des Sollwerts
             float alpha_sp = m_Ts / (SETPOINT_TAU + m_Ts);
             filtered_setpoint_x = filtered_setpoint_x + alpha_sp * (current_setpoint_x - filtered_setpoint_x);
-            filtered_setpoint_y = filtered_setpoint_y + alpha_sp * (current_setpoint_y - filtered_setpoint_y);
+            filtered_setpoint_y = 0.0f; //filtered_setpoint_y + alpha_sp * (current_setpoint_y - filtered_setpoint_y);
+
+            float ball_x_phys = m_spiData.data[0] * cos_theta_rotation - m_spiData.data[1] * sin_theta_rotation;
+            float ball_y_phys = m_spiData.data[0] * sin_theta_rotation + m_spiData.data[1] * cos_theta_rotation;
             
             // Calculate error between desired postion and current ball position
-            float error_x = filtered_setpoint_x - m_spiData.data[0]; //input in mm
-            float error_y = filtered_setpoint_y - m_spiData.data[1]; //input in mm
+            float error_x = filtered_setpoint_x - ball_x_phys; //input in mm
+            float error_y = filtered_setpoint_y - ball_y_phys; //input in mm
+
+            if (ball_was_missing) {
+                // Initialisiere den Regler mit dem aktuellen Fehler
+                m_ballPosCntrl_x.reset(error_x); 
+                m_ballPosCntrl_y.reset(error_y);
+
+                ball_was_missing = false;
+            }
 
             // Update Control output (PID) to get servo commands
             float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
             float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
 
             // rotate control outputs
-            float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
-            float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
-            
+            // float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
+            // float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
+
 
             // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
-            ikInput.pitch = DegreeToRad(rotated_output_x);
-            ikInput.roll = -DegreeToRad(rotated_output_y);
-            m_reply_data[6] = -DegreeToRad(rotated_output_x);
-            m_reply_data[7] = DegreeToRad(rotated_output_y);
+            ikInput.pitch = DegreeToRad(control_output_x_grad);
+            ikInput.roll = -DegreeToRad(control_output_y_grad);
+            m_reply_data[6] = DegreeToRad(control_output_x_grad);
+            m_reply_data[7] = -DegreeToRad(control_output_y_grad);
             ikInput.h = 110.5f; // original height for middle pos
 
-            // ikInput.pitch = 0.0f;
-            // ikInput.roll = 0.0f;
+            ikInput.pitch = 0.0f;
+            ikInput.roll = 0.0f;
             // m_reply_data[0] = -DegreeToRad(rotated_output_x);
             // m_reply_data[1] = DegreeToRad(rotated_output_y);
-            // ikInput.h = 110.5f - 0.0f; // original height for middle pos
+            // ikInput.h = 110.5f + 10.0f; // original height for middle pos
 
             // Hoehenkompensation
-            float ball_x_phys = m_spiData.data[0] * cos_theta_rotation - m_spiData.data[1] * sin_theta_rotation;
-            float ball_y_phys = m_spiData.data[0] * sin_theta_rotation + m_spiData.data[1] * cos_theta_rotation;
-            float compensation = ball_x_phys * tan(ikInput.pitch) - ball_y_phys * tan(ikInput.roll);
-            ikInput.h = 110.5f + compensation * 1.0f;
+
+            // float compensation = ball_x_phys * tan(ikInput.pitch) - ball_y_phys * tan(ikInput.roll);
+            // ikInput.h = 110.5f + compensation * 1.0f;
             // ikInput.h = clamp(110.5f - m_spiData.data[2] * 1.0f, 110.5f - 30.0f, 110.5f + 30.0f); // clamp height to avoid singularities
+
+            // FOR LOGGING
+            m_reply_data[3] = ball_x_phys; // Echo control output for logging
+            m_reply_data[4] = ball_y_phys; // Echo control output for logging
+
+            // //new height calculation
+            // if (m_spiData.data[2] > 65.0f) { // if ball is detected, adjust height based on measured distance
+            //     ikInput.h = 110.5f - 30.0f; // simple linear mapping, to be tuned
+            // } else if (m_spiData.data[2] < 55.0f)
+            // {
+            //     ikInput.h = 110.5f + 20.0f;
+            // }
+
 
             // Inverse Kinematik berechnen
             InverseKinematics3Leg::Result ikResult = ik.compute(ikInput);
@@ -274,12 +303,13 @@ void SPIComCntrl::executeTask()
             m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG);
             m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG);
             m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG);
+            ball_was_missing = true;
 
         }
 
         // Servo ansteuern
         m_servoD0.setPulseWidth(m_servo_commands[0]);
-        m_servoD1.setPulseWidth(m_servo_commands[1]);
+        m_servoD1.setPulseWidth(1.0f - m_servo_commands[1]);
         m_servoD2.setPulseWidth(m_servo_commands[2]);
 
     }
@@ -288,26 +318,27 @@ void SPIComCntrl::executeTask()
     m_reply_data[0] = m_spiData.data[0]; // X
     m_reply_data[1] = m_spiData.data[1]; // Y
     m_reply_data[2] = filtered_setpoint_x; // Echo servo D2 command
-    m_reply_data[3] = filtered_setpoint_y;  // Gyro X in rad/sec
-    m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
-    m_reply_data[5] = m_ImuData.gyro.z();  // Gyro Z in rad/sec
-    m_reply_data[6] = m_ImuData.acc.x();   // Acc X in m/sec^2
-    m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
+    // m_reply_data[3] = filtered_setpoint_y;  // Gyro X in rad/sec
+    // m_reply_data[4] = m_ImuData.gyro.y();  // Gyro Y in rad/sec
+    // m_reply_data[5] = m_ImuData.gyro.z();  // Gyro Z in rad/sec
+    // m_reply_data[6] = m_ImuData.acc.x();   // Acc X in m/sec^2
+    // m_reply_data[7] = m_ImuData.acc.y();   // Acc Y in m/sec^2
     m_reply_data[8] = m_ImuData.acc.z();   // Acc Z in m/sec^2
     m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
 
     // Send data over serial stream
     if (m_SerialStream.startByteReceived()) {
-        m_SerialStream.write(dtime_us);            
-        m_SerialStream.write(m_spiData.data[0]); // x
-        m_SerialStream.write(m_spiData.data[1]);// y
+        m_SerialStream.write(dtime_us);   
+        m_SerialStream.write(m_spiData.data[3]); // processing time   
+        // m_SerialStream.write(m_reply_data[3]); // x
+        m_SerialStream.write(m_reply_data[4]);// y
         m_SerialStream.write(m_spiData.data[2]);   // z
         
-        m_SerialStream.write(filtered_setpoint_x); // 4: pitch in grad
-        m_SerialStream.write(filtered_setpoint_y); // 5: roll in grad
+        m_SerialStream.write(filtered_setpoint_x); //4
+        m_SerialStream.write(filtered_setpoint_y); //5
         
-        m_SerialStream.write(m_reply_data[6]); // 6: Angewendeter Pitch (Grad)
-        m_SerialStream.write(m_reply_data[7]);  // 7: Angewendeter Roll (Grad)
+        m_SerialStream.write(m_reply_data[6]); // 6: Angewendeter Pitch (rad)
+        m_SerialStream.write(m_reply_data[7]);  // 7: Angewendeter Roll (rad)
         m_SerialStream.write(m_ImuData.acc.y());   //  8 Acc Y in m/sec^2
         m_SerialStream.write(m_ImuData.acc.z());   //  9 Acc Z in m/sec^2
         m_SerialStream.write(m_ImuData.rpy.x());   // 10 Roll in rad
@@ -316,7 +347,7 @@ void SPIComCntrl::executeTask()
         m_SerialStream.send();
     }
 
-    printf(m_executeMain ? "Main task enabled\n" : "Main task disabled\n");
+    // printf(m_executeMain ? "Main task enabled\n" : "Main task disabled\n");
 
 
     if (m_executeMain) {
