@@ -4,14 +4,14 @@
 // Servo & Inverse Kinematics mapping constants
 namespace
 {
-    constexpr float IK_HOME_DEG = 55.0f;    // aus IK: roll=0, pitch=0, h=98.1
-    constexpr float SERVO_MAX_DEG = 122.7f; // real nutzbarer Servobereich
+    constexpr float IK_HOME_DEG = 90.0f;    // aus IK: roll=0, pitch=0, h=110.5
+    constexpr float SERVO_MAX_DEG = 115.4f; // real nutzbarer Servobereich
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
-    constexpr float SERVO1_HOME_DEG = IK_HOME_DEG + 0.5f;
-    constexpr float SERVO2_HOME_DEG = IK_HOME_DEG + 2.8f;
-    constexpr float SERVO3_HOME_DEG = IK_HOME_DEG - 2.1f;
+    constexpr float SERVO1_HOME_DEG = 55.0f + 0.5f;
+    constexpr float SERVO2_HOME_DEG = 55.0f + 2.8f;
+    constexpr float SERVO3_HOME_DEG = 55.0f - 2.1f;
  
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
@@ -96,14 +96,19 @@ SPIComCntrl::SPIComCntrl()
     m_servoD1.calibratePulseMinMax(SERVO2_PULSE_MIN, SERVO2_PULSE_MAX);
     m_servoD2.calibratePulseMinMax(SERVO3_PULSE_MIN, SERVO3_PULSE_MAX);
 
+    // Initiale Servo-Kommandos auf reale Home-Lage setzen
+    m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+    m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+    m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
+
     if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad));
+        m_servoD0.enable(m_servo_commands[0]);
     }
     if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad));
+        m_servoD1.enable(m_servo_commands[1]);
     }
     if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad));
+        m_servoD2.enable(m_servo_commands[2]);
     }
 
     // Verdrehungswinkel definieren Kamera zu Base
@@ -307,9 +312,9 @@ void SPIComCntrl::executeTask()
                 float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
 
                 // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
-                m_ikInput.pitch = -DegreeToRad(control_output_x_grad);
-                m_ikInput.roll  = DegreeToRad(control_output_y_grad);
-                m_ikInput.h     = 70.5f;
+                m_ikInput.pitch = DegreeToRad(control_output_x_grad);
+                m_ikInput.roll  = -DegreeToRad(control_output_y_grad);
+                m_ikInput.h     = 110.5f;
 
 
                 InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
@@ -318,9 +323,9 @@ void SPIComCntrl::executeTask()
                 if (ikResult.success) {
 
                     // Servo commands in Grad berechnen
-                    float servo1_cmd_deg = SERVO1_HOME_DEG - (ikResult.alphaDeg[0] - IK_HOME_DEG);
-                    float servo2_cmd_deg = SERVO2_HOME_DEG - (ikResult.alphaDeg[1] - IK_HOME_DEG);
-                    float servo3_cmd_deg = SERVO3_HOME_DEG - (ikResult.alphaDeg[2] - IK_HOME_DEG);
+                    float servo1_cmd_deg = SERVO1_HOME_DEG + (ikResult.alphaDeg[0] - IK_HOME_DEG);
+                    float servo2_cmd_deg = SERVO2_HOME_DEG + (ikResult.alphaDeg[1] - IK_HOME_DEG);
+                    float servo3_cmd_deg = SERVO3_HOME_DEG + (ikResult.alphaDeg[2] - IK_HOME_DEG);
 
                     // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
                     servo1_cmd_deg = clamp(servo1_cmd_deg,
