@@ -75,10 +75,10 @@ private:
 
 
     
-    static constexpr float BALL_CTRL_KP = 0.04f * 0.6f;
-    static constexpr float BALL_CTRL_KI = 0.0f;
-    static constexpr float BALL_CTRL_TAU_V = 2.0f;
-    static constexpr float BALL_CTRL_TAU_f = 0.31f;
+    static constexpr float BALL_CTRL_KP = 0.04f;
+    static constexpr float BALL_CTRL_KI = 0.005f;
+    static constexpr float BALL_CTRL_TAU_V = 1.2f;
+    static constexpr float BALL_CTRL_TAU_f = 0.6f;
     static constexpr float BALL_CTRL_TAU_R_O = 0.0398f * 5.0f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
@@ -129,7 +129,7 @@ private:
 
     //userbutton
     DebounceIn user_button;
-    bool m_executeMain{true};
+    bool m_executeMain{false};
     void toggleExecuteMainFcn();
 
     void executeTask() override;

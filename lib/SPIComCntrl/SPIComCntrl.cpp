@@ -35,6 +35,10 @@ namespace
     constexpr float KALMAN_HE_1 = 714.325806f;
     constexpr float KALMAN_HE_2 = 1.000000f;
 
+    //Setpoint filter
+    float filtered_setpoint_x = 0.0f;
+    float filtered_setpoint_y = 0.0f;
+
     // Variabeln für 333 hz loop
     int control_loop_counter = 0;
 }
@@ -112,15 +116,15 @@ SPIComCntrl::SPIComCntrl()
     m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
     m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
 
-    if (!m_servoD0.isEnabled()) {
-        m_servoD0.enable(m_servo_commands[0]);
-    }
-    if (!m_servoD1.isEnabled()) {
-        m_servoD1.enable(m_servo_commands[1]);
-    }
-    if (!m_servoD2.isEnabled()) {
-        m_servoD2.enable(m_servo_commands[2]);
-    }
+    // if (!m_servoD0.isEnabled()) {
+    //     m_servoD0.enable(m_servo_commands[0]);
+    // }
+    // if (!m_servoD1.isEnabled()) {
+    //     m_servoD1.enable(m_servo_commands[1]);
+    // }
+    // if (!m_servoD2.isEnabled()) {
+    //     m_servoD2.enable(m_servo_commands[2]);
+    // }
 
     // Verdrehungswinkel definieren Kamera zu Base
     // camera_offset_angle_deg = 90.0f + 14.73f;
@@ -154,8 +158,19 @@ void SPIComCntrl::executeTask()
     // Standard: Konstante Soll-Position
     TrajectoryRef traj = m_trajectory.update(m_Ts);
 
-    const float xd = traj.x_mm;
-    const float yd = traj.y_mm;
+    static constexpr float SETPOINT_TAU = 0.1f * BALL_CTRL_TAU_V; // Tf aus MATLAB (Ca. 1 / w_d)
+
+    // Weichzeichnen des Sollwerts
+    float alpha_sp = m_Ts / (SETPOINT_TAU + m_Ts);
+
+    filtered_setpoint_x = filtered_setpoint_x + alpha_sp * (traj.x_mm - filtered_setpoint_x);
+    filtered_setpoint_y = filtered_setpoint_y + alpha_sp * (traj.y_mm - filtered_setpoint_y);
+
+    // const float xd = traj.x_mm;
+    // const float yd = traj.y_mm;
+
+    const float xd = filtered_setpoint_x;
+    const float yd = filtered_setpoint_y;
 
     const float xd_dot = traj.vx_mm_s;
     const float yd_dot = traj.vy_mm_s;
@@ -266,7 +281,7 @@ void SPIComCntrl::executeTask()
 
     if (m_Imu.isCalibrated()) {
         
-        if (m_kalmanHasFirstMeasurement && (missing_data_counter * m_Ts) <= VISION_TIMEOUT && m_executeMain) {
+        if (m_kalmanHasFirstMeasurement && (missing_data_counter * m_Ts) <= VISION_TIMEOUT && m_executeMain && ((m_spiData.data[2] < 50.0f) && (m_spiData.data[2] > -50.0f))) {
             
             // Kalman-Schätzungen lesen
             const float x_hat_mm = m_kalmanX.getPositionMm();
@@ -368,9 +383,12 @@ void SPIComCntrl::executeTask()
         } else {
 
             // Ball weg, Servos in Mittelstellung halten
-            m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
-            m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
-            m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
+            // m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+            // m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+            // m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
+            m_servoD0.disable();
+            m_servoD1.disable();
+            m_servoD2.disable();
         }
 
         // Servo ansteuern
