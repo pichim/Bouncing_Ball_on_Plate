@@ -75,7 +75,7 @@ private:
 
 
     
-    static constexpr float BALL_CTRL_KP = 0.04f * 0.4f;
+    static constexpr float BALL_CTRL_KP = 0.04f * 0.6f;
     static constexpr float BALL_CTRL_KI = 0.0f;
     static constexpr float BALL_CTRL_TAU_V = 2.0f;
     static constexpr float BALL_CTRL_TAU_f = 0.31f;

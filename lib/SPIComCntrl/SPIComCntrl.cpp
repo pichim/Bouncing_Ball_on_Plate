@@ -87,9 +87,20 @@ SPIComCntrl::SPIComCntrl()
     m_kalmanX.setMaxDisturbanceRad(0.15f);
     m_kalmanY.setMaxDisturbanceRad(0.15f);
 
-    // Trajectory
-    m_trajectory.setHold(0.0f, 0.0f);
+    // Trajectory setHold
+    // m_trajectory.setHold(0.0f, 0.0f);
+
+    // Trajectory setCircle
     // m_trajectory.setCircle(35.0f, 0.2f);
+
+    // Trajectory setSequence
+    static const SequencePoint seq[] = {
+        {  0.0f,  0.0f, 6.0f },
+        { 40.0f,  0.0f, 6.0f },
+        {  0.0f,  0.0f, 6.0f },
+        {-40.0f,  0.0f, 6.0f },
+    };
+    m_trajectory.setSequence(seq, 4);
     
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO1_PULSE_MIN, SERVO1_PULSE_MAX);
@@ -140,12 +151,8 @@ void SPIComCntrl::executeTask()
     const float dtime_us = duration_cast<microseconds>(time_us - m_time_previous_us).count();
     m_time_previous_us = time_us;
 
-
-    // Trajektorie einmal pro Zyklus berechnen
-    float t_s = duration_cast<microseconds>(time_us).count() * 1.0e-6f;
-
     // Standard: Konstante Soll-Position
-    TrajectoryRef traj = m_trajectory.update(t_s);
+    TrajectoryRef traj = m_trajectory.update(m_Ts);
 
     const float xd = traj.x_mm;
     const float yd = traj.y_mm;
