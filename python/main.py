@@ -224,9 +224,11 @@ while True:
             
             fps_counter = 0
             fps_start_time = now
-            print(f"BALL FPS: {current_fps:.2f}")
+            # print(f"BALL FPS: {current_fps:.2f}")
             if x is not None and y is not None and z is not None:
                 print(x, y, z)
+            # print("filtered setpoint x: " + str(received_data.data[2]))
+            # print("filtered setpoint y: " + str(received_data.data[3]))
 
         if pos is not None:
             x, y, z, processing_time_ms = pos
@@ -335,8 +337,8 @@ while True:
                 )"""
             
             
-            # print(received_data.data[0])
-            # print(received_data.data[1])
+            # print("pitch: " + str(received_data.data[0]))
+            # print("roll: " + str(received_data.data[1]))
         except OSError as e:
             # HIER WIRD DER CRASH VERHINDERT!
             print(f"SPI Hardware-Fehler (Nucleo flasht?): {e}")

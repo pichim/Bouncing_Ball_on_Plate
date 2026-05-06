@@ -255,12 +255,28 @@ class CameraProcessor:
                         Y = D * v_center_norm[1]
                         Z = D * v_center_norm[2]  # Das ist jetzt ein absolut stabiles Z!
 
+                        # --- Start der Z-Kompensation (Entzerrung) ---
+                        # 1-3 auskommentierung if entzerrung nicht gewunscht
+                        # 1. Koeffizienten aus dem MATLAB-Fit
+                        c0 = 185.7
+                        # c1 = 0.0009
+                        # c2 = -0.0058
+                        # c3 = -0.0001
+                        # c4 = -0.0001
+                        # c5 = -0.0002
 
-                    
-                # else:
-                #     # --- METHODE 2: Punkt-Entzerrung ---
-                #     frame_process = frame
-                #     x_distorted, y_distorted, r = self.detect_ball(frame_process)
+                        # 2. Berechne die erwartete Wölbung (das Modell) an der aktuellen X, Y Position
+                        # Achtung: Python nutzt ** für Potenzen
+                        # z_modell = c0 + (c1 * X) + (c2 * Y) + (c3 * X**2) + (c4 * Y**2) + (c5 * X * Y)
+                        z_modell = c0
+
+                        # 3. Z korrigieren: Gemessener Wert minus die "Beule" plus Referenzhöhe (c0)
+                        Z = Z - (z_modell)
+
+                    # else:
+                    #     # --- METHODE 2: Punkt-Entzerrung ---
+                    #     frame_process = frame
+                    #     x_distorted, y_distorted, r = self.detect_ball(frame_process)
                     
                 #     if r > 5:
                 #         pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
@@ -327,8 +343,14 @@ class CameraProcessor:
         # lower_orange = np.array([10, 150, 100])
         # upper_orange = np.array([20, 255, 255])
 
+        # light
         lower_orange = np.array([8, 130, 80])
-        upper_orange = np.array([18, 255, 170])      
+        upper_orange = np.array([18, 255, 170])   
+
+        # dark
+        # lower_orange = np.array([8, 150, 20])
+        # upper_orange = np.array([18, 255, 100])
+
 
         mask = cv2.inRange(hsv, lower_orange, upper_orange)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
