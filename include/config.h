@@ -27,7 +27,7 @@
 #define BBOP_SERVO_D0_PIN PB_2
 #define BBOP_SERVO_D1_PIN PC_8
 #define BBOP_SERVO_D2_PIN PC_6
-#define BBOP_SERVO_PWM_PERIOD_US 3003 // 20 ms period for standard hobby servos only temporary!
+#define BBOP_SERVO_PWM_PERIOD_US 3000 // 20 ms period for standard hobby servos only temporary!
 // #define BBOP_SERVO_angle_range_rad 2.141519f
 
 #define BBOP_SERVO1_angle_range_grad 116.35f

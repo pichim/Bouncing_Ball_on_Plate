@@ -9,9 +9,10 @@ namespace
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
-    constexpr float SERVO1_HOME_DEG = IK_HOME_DEG + 0.0f;
-    constexpr float SERVO2_HOME_DEG = IK_HOME_DEG + 0.0f;
-    constexpr float SERVO3_HOME_DEG = IK_HOME_DEG + 0.0f;
+    constexpr float SERVO1_HOME_DEG = IK_HOME_DEG + 0.5f;
+    constexpr float SERVO2_HOME_DEG = IK_HOME_DEG + 2.8f;
+    constexpr float SERVO3_HOME_DEG = IK_HOME_DEG - 2.1f;
+ 
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f; 
@@ -25,7 +26,7 @@ namespace
 
     // Kalman / Timing
     constexpr float CAMERA_TS_S = 0.020f; // 50 Hz
-    constexpr float CONTROL_TS_S = 0.02f; // 1000 Hz
+    constexpr float CONTROL_TS_S = BBOP_SERVO_PWM_PERIOD_US * 1.0e-6f; // 333 Hz
 
     // Aus MATLAB:
     // He = lqr(Ae.', Ce.', Qe, Re).'
@@ -33,6 +34,9 @@ namespace
     constexpr float KALMAN_HE_0 = 39.097973f;
     constexpr float KALMAN_HE_1 = 714.325806f;
     constexpr float KALMAN_HE_2 = 1.000000f;
+
+    // Variabeln für 333 hz loop
+    int control_loop_counter = 0;
 }
 
 SPIComCntrl::SPIComCntrl()
@@ -131,6 +135,7 @@ void SPIComCntrl::executeTask()
     const float dtime_us = duration_cast<microseconds>(time_us - m_time_previous_us).count();
     m_time_previous_us = time_us;
 
+
     // Trajektorie einmal pro Zyklus berechnen
     float t_s = duration_cast<microseconds>(time_us).count() * 1.0e-6f;
 
@@ -198,8 +203,10 @@ void SPIComCntrl::executeTask()
             float current_error_x = xd - x_meas_mm;
             float current_error_y = yd - y_meas_mm;
 
-            m_ballPosCntrl_x.reset(current_error_x);
-            m_ballPosCntrl_y.reset(current_error_y);
+            // m_ballPosCntrl_x.reset(current_error_x);
+            // m_ballPosCntrl_y.reset(current_error_y);
+            m_ballPosCntrl_x.reset(0.0f);
+            m_ballPosCntrl_y.reset(0.0f);
         } else if (ballWasLost) {
                 /*
                  * Ball was missing for a longer time.  
@@ -211,8 +218,10 @@ void SPIComCntrl::executeTask()
                 const float current_error_x = xd - x_meas_mm;
                 const float current_error_y = yd - y_meas_mm;
 
-                m_ballPosCntrl_x.reset(current_error_x);
-                m_ballPosCntrl_y.reset(current_error_y);
+                // m_ballPosCntrl_x.reset(current_error_x);
+                // m_ballPosCntrl_y.reset(current_error_y);
+                m_ballPosCntrl_x.reset(0.0f);
+                m_ballPosCntrl_y.reset(0.0f);
         }
         else {
             /*
@@ -252,85 +261,97 @@ void SPIComCntrl::executeTask()
             const float y_hat_mm = m_kalmanY.getPositionMm();
             const float vx_hat_mm_s = m_kalmanX.getVelocityMmS();
             const float vy_hat_mm_s = m_kalmanY.getVelocityMmS();
-
-            // Calculate error between desired postion and current ball position
-            // Calculate error without Kalman
-            float error_x = xd - m_spiData.data[0]; //input in mm
-            float error_y = yd - m_spiData.data[1]; //input in mm
-            // Calculate error with Kalman
-            // error_x = xd - x_hat_mm;
-            // error_y = yd - y_hat_mm;
-            // error_vx = xd_dot - vx_hat_mm_s;
-            // error_vy = yd_dot - vy_hat_mm_s;
             
             constexpr float BALL_CTRL_KV = 0.03f; // [deg / (mm/s)] vorsichtig starten
 
-            // control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x) + BALL_CTRL_KV * error_vx;
-            // control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y) + BALL_CTRL_KV * error_vy;
 
-            // // Feedforward aus Soll-Beschleunigung
-            // theta_ff_x_rad = xd_ddot / BALL_ACC_PER_RAD;
-            // theta_ff_y_rad = yd_ddot / BALL_ACC_PER_RAD;
 
-            // theta_ff_x_grad = TRAJ_FF_GAIN * (theta_ff_x_rad * 180.0f / M_PIf);
-            // theta_ff_y_grad = TRAJ_FF_GAIN * (theta_ff_y_rad * 180.0f / M_PIf);
+            // Feedforward aus Soll-Beschleunigung
+            theta_ff_x_rad = xd_ddot / BALL_ACC_PER_RAD;
+            theta_ff_y_rad = yd_ddot / BALL_ACC_PER_RAD;
 
-            // // Gesamt-Stellgröße
-            // float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
-            // float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
+            theta_ff_x_grad = TRAJ_FF_GAIN * (theta_ff_x_rad * 180.0f / M_PIf);
+            theta_ff_y_grad = TRAJ_FF_GAIN * (theta_ff_y_rad * 180.0f / M_PIf);
 
+
+            // herauslöschen sobald klar ist das rotation effektiv nicht mehr gebraucht wird.
             // rotate control outputs
             // float rotated_output_x = control_output_x_grad * cos_theta_rotation - control_output_y_grad * sin_theta_rotation;
             // float rotated_output_y = control_output_x_grad * sin_theta_rotation + control_output_y_grad * cos_theta_rotation;
 
+            // countervariabeln für 333 hz loop
+            control_loop_counter++;
 
-            float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
-            float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
+            if (control_loop_counter >= 3) {
+                control_loop_counter = 0;
+                // Calculate error between desired postion and current ball position
+                // Calculate error without Kalman
+                // error_x = xd - m_spiData.data[0]; //input in mm
+                // error_y = yd - m_spiData.data[1]; //input in mm
+                // Calculate error with Kalman
+                error_x = xd - x_hat_mm;
+                error_y = yd - y_hat_mm;
+                error_vx = xd_dot - vx_hat_mm_s;
+                error_vy = yd_dot - vy_hat_mm_s;
 
-            // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
-            m_ikInput.pitch = -DegreeToRad(control_output_x_grad);
-            m_ikInput.roll  = DegreeToRad(control_output_y_grad);
-            m_ikInput.h     = 110.5f;
+                // ohne Kalman filter
+                // float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
+                // float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
 
-            InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
+                //mit Klaman filter
+                control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x) + BALL_CTRL_KV * error_vx;
+                control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y) + BALL_CTRL_KV * error_vy;
 
-            // WICHTIG: IK-Ergebnis prüfen, bevor alphaDeg verwendet wird
-            if (ikResult.success) {
+                // Gesamt-Stellgröße
+                float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
+                float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
 
-                // Servo commands in Grad berechnen
-                float servo1_cmd_deg = SERVO1_HOME_DEG - (ikResult.alphaDeg[0] - IK_HOME_DEG);
-                float servo2_cmd_deg = SERVO2_HOME_DEG - (ikResult.alphaDeg[1] - IK_HOME_DEG);
-                float servo3_cmd_deg = SERVO3_HOME_DEG - (ikResult.alphaDeg[2] - IK_HOME_DEG);
+                // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
+                m_ikInput.pitch = -DegreeToRad(control_output_x_grad);
+                m_ikInput.roll  = DegreeToRad(control_output_y_grad);
+                m_ikInput.h     = 70.5f;
 
-                // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
-                servo1_cmd_deg = clamp(servo1_cmd_deg,
-                                       SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                       SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
-                servo2_cmd_deg = clamp(servo2_cmd_deg,
-                                       SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                       SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 
-                servo3_cmd_deg = clamp(servo3_cmd_deg,
-                                       SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                       SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                // WICHTIG: IK-Ergebnis prüfen, bevor alphaDeg verwendet wird
+                if (ikResult.success) {
 
-                // Zusätzlicher harter Sicherheitsclamp auf den realen Servobereich
-                servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
-                servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
-                servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+                    // Servo commands in Grad berechnen
+                    float servo1_cmd_deg = SERVO1_HOME_DEG - (ikResult.alphaDeg[0] - IK_HOME_DEG);
+                    float servo2_cmd_deg = SERVO2_HOME_DEG - (ikResult.alphaDeg[1] - IK_HOME_DEG);
+                    float servo3_cmd_deg = SERVO3_HOME_DEG - (ikResult.alphaDeg[2] - IK_HOME_DEG);
 
-                // Erst ganz am Schluss in normierten Servo-Befehl umrechnen
-                m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg, BBOP_SERVO1_angle_range_grad);
-                m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg, BBOP_SERVO2_angle_range_grad);
-                m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg, BBOP_SERVO3_angle_range_grad);
+                    // Zuerst auf +/-20° um die jeweilige Home-Lage clampen
+                    servo1_cmd_deg = clamp(servo1_cmd_deg,
+                                        SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                                        SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
-            } else {
-                // Falls IK fehlschlägt: sicher auf Home-Lage zurück
-                m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
-                m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
-                m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
-            }
+                    servo2_cmd_deg = clamp(servo2_cmd_deg,
+                                        SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                                        SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+                    servo3_cmd_deg = clamp(servo3_cmd_deg,
+                                        SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
+                                        SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+
+                    // Zusätzlicher harter Sicherheitsclamp auf den realen Servobereich
+                    servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+                    servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+                    servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
+
+                    // Erst ganz am Schluss in normierten Servo-Befehl umrechnen
+                    m_servo_commands[0] = DegreeToPWM(servo1_cmd_deg, BBOP_SERVO1_angle_range_grad);
+                    m_servo_commands[1] = DegreeToPWM(servo2_cmd_deg, BBOP_SERVO2_angle_range_grad);
+                    m_servo_commands[2] = DegreeToPWM(servo3_cmd_deg, BBOP_SERVO3_angle_range_grad);
+
+                } else {
+                    // Falls IK fehlschlägt: sicher auf Home-Lage zurück
+                    m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+                    m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+                    m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
+                }
+            }  
 
         } else {
 

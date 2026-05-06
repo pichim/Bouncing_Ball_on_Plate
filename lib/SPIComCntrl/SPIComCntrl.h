@@ -64,12 +64,22 @@ private:
     // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
-   
-    static constexpr float BALL_CTRL_KP = 0.2383 * 0.3f; //0.2f;
+   // michi Zwischenstand 
+    // static constexpr float BALL_CTRL_KP = 0.2383 * 0.3f; //0.2f;
+    // static constexpr float BALL_CTRL_KI = 0.0f;
+    // static constexpr float BALL_CTRL_TAU_V = 4.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
+    // static constexpr float BALL_CTRL_TAU_f = 0.1314f * 2.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
+    // static constexpr float BALL_CTRL_TAU_R_O = 0.0398f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
+    // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
+    // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+
+
+    
+    static constexpr float BALL_CTRL_KP = 0.04f * 0.4f;
     static constexpr float BALL_CTRL_KI = 0.0f;
-    static constexpr float BALL_CTRL_TAU_V = 4.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;
-    static constexpr float BALL_CTRL_TAU_f = 0.1314f * 2.5f;//0.06f * 1.0f;//0.1314f * 0.1; //0.0413f * 1.0f;    
-    static constexpr float BALL_CTRL_TAU_R_O = 0.0398f * 5.0f;//0.03f * 2.0f; //0.0265f * 5.0f; //0.0138f;
+    static constexpr float BALL_CTRL_TAU_V = 2.0f;
+    static constexpr float BALL_CTRL_TAU_f = 0.31f;
+    static constexpr float BALL_CTRL_TAU_R_O = 0.0398f * 5.0f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
@@ -106,8 +116,6 @@ private:
 
     TrajectoryGenerator m_trajectory;
 
-    // uint32_t m_controllerDivider = 0; 
-    // Damit Regler mit 500Hz läuft brauchen wir einen Teiler, da der Thread mit 1000Hz läuft. --- IGNORE ---
 
     float m_Ts;
     PIDCntrl m_ballPosCntrl_x;
@@ -121,7 +129,7 @@ private:
 
     //userbutton
     DebounceIn user_button;
-    bool m_executeMain{false};
+    bool m_executeMain{true};
     void toggleExecuteMainFcn();
 
     void executeTask() override;
