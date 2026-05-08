@@ -41,6 +41,7 @@ Matrix<float, N, 1> observer::do_step(float u, float y)
 
     // Observer mit verzögertem Messwert
     m_dxdt_hat = (m_A - m_H * m_C) * m_x_hat + m_B * u + m_H * y_delayed;
+    // m_dxdt_hat = (m_A - m_H * m_C) * m_x_hat + m_B * u + m_H * y;
     integrate_states();
     return m_x_hat;
 }
@@ -84,6 +85,9 @@ void observer::init()
     m_H.setZero();
     m_dxdt_hat.setZero();
     m_x_hat.setZero();
+
+    m_y_buffer.fill(0.0f);
+    m_y_buffer_index = 0;
 
     // --- Matlab ---
     // set A, B, C, H matrices of observer
