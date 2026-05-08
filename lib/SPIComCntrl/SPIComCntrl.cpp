@@ -371,13 +371,13 @@ void SPIComCntrl::executeTask()
 
             control_loop_counter = 0;
 
-            // Camera-only Positionsfehler
-            const float error_x = xd - last_x_meas_mm;
-            const float error_y = yd - last_y_meas_mm;
+            // // Camera-only Positionsfehler
+            // const float error_x = xd - last_x_meas_mm;
+            // const float error_y = yd - last_y_meas_mm;
             
-            // // Statischer Kalman Positionsfehler
-            // const float error_x = xd - m_observerX.getPositionMm();
-            // const float error_y = yd - m_observerY.getPositionMm();
+            // Statischer Kalman Positionsfehler
+            const float error_x = xd - m_observerX.getPositionMm();
+            const float error_y = yd - m_observerY.getPositionMm();
 
             // PID-T1 Positionsregler
             float control_output_x_grad = m_ballPosCntrl_x.update(error_x);

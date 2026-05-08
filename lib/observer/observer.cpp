@@ -19,9 +19,28 @@ observer::~observer() {}
 // calculate one step of the observer
 Matrix<float, N, 1> observer::do_step(float u, float y)
 {
-    // --- P2, AUFGABE 2.3 ---
-    // implement observer and apply time discrete integration step
-    m_dxdt_hat = (m_A - m_H * m_C) * m_x_hat + m_B * u + m_H * y;
+    /*
+     * Kamera-Totzeit:
+     * nd = Tt / Ts = 0.016 / 0.001 = 16
+     *
+     * y_delayed ist der Messwert von vor 16 Observer-Schritten.
+     * Am Anfang ist der Buffer mit 0 initialisiert.
+     */
+
+    float y_delayed = m_y_buffer[m_y_buffer_index];
+
+    // aktuellen Messwert in Buffer schreiben
+    m_y_buffer[m_y_buffer_index] = y;
+
+    // Buffer-Index weiterschalten
+    m_y_buffer_index++;
+
+    if (m_y_buffer_index >= nd) {
+        m_y_buffer_index = 0;
+    }
+
+    // Observer mit verzögertem Messwert
+    m_dxdt_hat = (m_A - m_H * m_C) * m_x_hat + m_B * u + m_H * y_delayed;
     integrate_states();
     return m_x_hat;
 }
@@ -36,6 +55,9 @@ void observer::reset(float position_mm, float velocity_mm_s, float disturbance_r
                disturbance_rad;
 
     m_dxdt_hat.setZero();
+
+    m_y_buffer.fill(0.0f);
+    m_y_buffer_index = 0;
 }
 
 float observer::getPositionMm() const
