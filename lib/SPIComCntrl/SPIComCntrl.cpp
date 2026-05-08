@@ -45,6 +45,11 @@ namespace
     float filtered_setpoint_x = 0.0f;
     float filtered_setpoint_y = 0.0f;
 
+    float xd;
+    float yd;
+
+    float ERROR_DEADBAND_MM = 3.0f;
+
     // Variabeln für 333 hz loop
     int control_loop_counter = 0;
 
@@ -112,12 +117,16 @@ SPIComCntrl::SPIComCntrl()
 
     // Trajectory setSequence
     static const SequencePoint seq[] = {
-        {  0.0f,  0.0f, 6.0f },
-        { 40.0f,  0.0f, 6.0f },
-        {  0.0f,  0.0f, 6.0f },
-        {-40.0f,  0.0f, 6.0f },
+        {  45.0f, -20.0f, 6.0f },
+        { -35.0f,  40.0f, 6.0f },
+        {  15.0f,  25.0f, 6.0f },
+        { -50.0f,  -5.0f, 6.0f },
+        {  10.0f, -45.0f, 6.0f },
+        { -25.0f, -30.0f, 6.0f },
+        {  50.0f,   0.0f, 6.0f },
+        {   0.0f,  50.0f, 6.0f },
     };
-    m_trajectory.setSequence(seq, 4);
+    m_trajectory.setSequence(seq, 8);
     
     // Calibrate and enable servos (normalised pulse widths)
     m_servoD0.calibratePulseMinMax(SERVO1_PULSE_MIN, SERVO1_PULSE_MAX);
@@ -171,7 +180,7 @@ void SPIComCntrl::executeTask()
     // Standard: Konstante Soll-Position
     TrajectoryRef traj = m_trajectory.update(m_Ts);
 
-    static constexpr float SETPOINT_TAU = 0.1f * BALL_CTRL_TAU_V; // Tf aus MATLAB (Ca. 1 / w_d)
+    static constexpr float SETPOINT_TAU = 0.7f * BALL_CTRL_TAU_V; // Tf aus MATLAB (Ca. 1 / w_d)
 
     // Weichzeichnen des Sollwerts
     float alpha_sp = m_Ts / (SETPOINT_TAU + m_Ts);
@@ -182,8 +191,9 @@ void SPIComCntrl::executeTask()
     // const float xd = traj.x_mm;
     // const float yd = traj.y_mm;
 
-    const float xd = filtered_setpoint_x;
-    const float yd = filtered_setpoint_y;
+    xd = filtered_setpoint_x;
+    yd = filtered_setpoint_y;
+
 
     const float xd_dot = traj.vx_mm_s;
     const float yd_dot = traj.vy_mm_s;
@@ -209,7 +219,7 @@ void SPIComCntrl::executeTask()
 
     // Handle SPI communication: check for new data, update control, prepare reply  
 
-    bool newDataAvailable = m_SpiSlaveDMA.hasNewData();
+    bool newDataAvailable = m_SpiSlaveDMA.hasNewData();   
 
     if (newDataAvailable) {
         m_spiData = m_SpiSlaveDMA.getSPIData();
@@ -342,25 +352,38 @@ void SPIComCntrl::executeTask()
                 control_loop_counter = 0;
                 // Calculate error between desired postion and current ball position
                 // Calculate error without Kalman
-                // error_x = xd - m_spiData.data[0]; //input in mm
-                // error_y = yd - m_spiData.data[1]; //input in mm
+                error_x = xd - m_spiData.data[0]; //input in mm
+                error_y = yd - m_spiData.data[1]; //input in mm
                 // Calculate error with Kalman
-                error_x = xd - x_hat_mm;
-                error_y = yd - y_hat_mm;
-                error_vx = xd_dot - vx_hat_mm_s;
-                error_vy = yd_dot - vy_hat_mm_s;
+                // error_x = xd - x_hat_mm;
+                // error_y = yd - y_hat_mm;
+                // error_vx = xd_dot - vx_hat_mm_s;
+                // error_vy = yd_dot - vy_hat_mm_s;
+
+
+                // Deadband für I-Anteil: Wenn Fehler klein, dann I-Anteil einfrieren, um Oszillationen zu vermeiden. Sonst normal aufsummieren.
+                // 3. Error Deadband anwenden (Friert I-Anteil ein und beruhigt P/D)
+                // if (std::abs(error_x) < ERROR_DEADBAND_MM) {
+                //     error_x = 0.0f;
+                // }
+                
+                // if (std::abs(error_y) < ERROR_DEADBAND_MM) {
+                //     error_y = 0.0f;
+                // }
+
+
 
                 // ohne Kalman filter
-                // float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
-                // float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
+                float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
+                float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
 
-                //mit Klaman filter
-                control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x) + BALL_CTRL_KV * error_vx;
-                control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y) + BALL_CTRL_KV * error_vy;
+                // //mit Klaman filter
+                // control_output_fb_x_grad = m_ballPosCntrl_x.update(error_x) + BALL_CTRL_KV * error_vx;
+                // control_output_fb_y_grad = m_ballPosCntrl_y.update(error_y) + BALL_CTRL_KV * error_vy;
 
-                // Gesamt-Stellgröße
-                float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
-                float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
+                // // Gesamt-Stellgröße
+                // float control_output_x_grad = control_output_fb_x_grad + theta_ff_x_grad;
+                // float control_output_y_grad = control_output_fb_y_grad + theta_ff_y_grad;
 
                 // Inputs für Inverse Kinematik berechnen (Roll, Pitch, Höhe)
                 m_ikInput.pitch = DegreeToRad(control_output_x_grad);
@@ -439,31 +462,43 @@ void SPIComCntrl::executeTask()
     m_SpiSlaveDMA.setReplyData(m_reply_data, 9);
 
     // Send data over serial stream (Kalman compact)
-    if (m_SerialStream.startByteReceived()) {
+    // if (m_SerialStream.startByteReceived()) {
+    //     m_SerialStream.write(dtime_us);                         //  0 Delta time in us -> data.time
+    
+    //     m_SerialStream.write(m_ImuData.rpy.x());                //  1 roll [rad]
+    //     m_SerialStream.write(m_ImuData.rpy.y());                //  2 pitch [rad]
+    
+    //     m_SerialStream.write(m_spiData.data[0]);                //  3 x_meas camera [mm]
+    //     m_SerialStream.write(m_spiData.data[1]);                //  4 y_meas camera [mm]
+    
+    //     m_SerialStream.write(m_kalmanX.getPositionMm());        //  5 x_hat [mm]
+    //     m_SerialStream.write(m_kalmanX.getVelocityMmS());       //  6 vx_hat [mm/s]
+    //     m_SerialStream.write(m_kalmanX.getDisturbanceRad());    //  7 dx_hat disturbance [rad]
+    
+    //     m_SerialStream.write(m_kalmanY.getPositionMm());        //  8 y_hat [mm]
+    //     m_SerialStream.write(m_kalmanY.getVelocityMmS());       //  9 vy_hat [mm/s]
+    //     m_SerialStream.write(m_kalmanY.getDisturbanceRad());    // 10 dy_hat disturbance [rad]
+    
+    //     m_SerialStream.write(log_x_pred_before_update);         // 11 x_pred_before_update [mm]
+    //     m_SerialStream.write(log_y_pred_before_update);         // 12 y_pred_before_update [mm]
+    //     m_SerialStream.write(log_innovation_x);                 // 13 innovation_x [mm]
+    //     m_SerialStream.write(log_innovation_y);                 // 14 innovation_y [mm]
+    
+    //     m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 camera_update flag [-]
+    //     m_SerialStream.write(m_kalmanHasFirstMeasurement ? 1.0f : 0.0f); // 16 kalman_valid flag [-]
+    
+    //     m_SerialStream.send();
+    // }
+
+        if (m_SerialStream.startByteReceived()) {
         m_SerialStream.write(dtime_us);                         //  0 Delta time in us -> data.time
-    
-        m_SerialStream.write(m_ImuData.rpy.x());                //  1 roll [rad]
-        m_SerialStream.write(m_ImuData.rpy.y());                //  2 pitch [rad]
-    
+
         m_SerialStream.write(m_spiData.data[0]);                //  3 x_meas camera [mm]
         m_SerialStream.write(m_spiData.data[1]);                //  4 y_meas camera [mm]
     
-        m_SerialStream.write(m_kalmanX.getPositionMm());        //  5 x_hat [mm]
-        m_SerialStream.write(m_kalmanX.getVelocityMmS());       //  6 vx_hat [mm/s]
-        m_SerialStream.write(m_kalmanX.getDisturbanceRad());    //  7 dx_hat disturbance [rad]
-    
-        m_SerialStream.write(m_kalmanY.getPositionMm());        //  8 y_hat [mm]
-        m_SerialStream.write(m_kalmanY.getVelocityMmS());       //  9 vy_hat [mm/s]
-        m_SerialStream.write(m_kalmanY.getDisturbanceRad());    // 10 dy_hat disturbance [rad]
-    
-        m_SerialStream.write(log_x_pred_before_update);         // 11 x_pred_before_update [mm]
-        m_SerialStream.write(log_y_pred_before_update);         // 12 y_pred_before_update [mm]
-        m_SerialStream.write(log_innovation_x);                 // 13 innovation_x [mm]
-        m_SerialStream.write(log_innovation_y);                 // 14 innovation_y [mm]
-    
-        m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 camera_update flag [-]
-        m_SerialStream.write(m_kalmanHasFirstMeasurement ? 1.0f : 0.0f); // 16 kalman_valid flag [-]
-    
+        m_SerialStream.write(xd);        //  5 x_hat [mm]
+        m_SerialStream.write(yd);       //  6 vx_hat [mm/s]
+
         m_SerialStream.send();
     }
 
