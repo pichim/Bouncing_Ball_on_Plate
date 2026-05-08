@@ -5,7 +5,7 @@
 
 #include "mbed.h"
 
-#define N 2      // number of states
+#define N 3      // number of states
 #define N_meas 1 // number measurements
 
 using namespace Eigen;
@@ -13,9 +13,15 @@ using namespace Eigen;
 class observer
 {
 public:
-    observer() {};       // default constructor
+    observer();          // default constructor
     observer(float);     // constructor
     virtual ~observer(); // deconstructor
+
+    void reset(float position_mm, float velocity_mm_s = 0.0f, float disturbance_rad = 0.0f);
+
+    float getPositionMm() const;
+    float getVelocityMmS() const;
+    float getDisturbanceRad() const;
 
     Matrix<float, N, 1> do_step(float, float); // calculate one step of the observer
     Matrix<float, N, 1> get_x_obsv();          // get the observed states
