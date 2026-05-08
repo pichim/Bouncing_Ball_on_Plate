@@ -358,12 +358,13 @@ void SPIComCntrl::executeTask()
 
             control_loop_counter = 0;
 
-            // // Camera-only Positionsfehler
-            // const float error_x = xd - last_x_meas_mm;
-            // const float error_y = yd - last_y_meas_mm;
-            // Statischer Kalman Positionsfehler
-            const float error_x = xd - m_observerX.getPositionMm();
-            const float error_y = yd - m_observerY.getPositionMm();
+            // Camera-only Positionsfehler
+            const float error_x = xd - last_x_meas_mm;
+            const float error_y = yd - last_y_meas_mm;
+            
+            // // Statischer Kalman Positionsfehler
+            // const float error_x = xd - m_observerX.getPositionMm();
+            // const float error_y = yd - m_observerY.getPositionMm();
 
             // PID-T1 Positionsregler
             float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
@@ -476,11 +477,11 @@ void SPIComCntrl::executeTask()
         m_SerialStream.write(log_control_output_x_grad);        // 13 controller output x [deg]
         m_SerialStream.write(log_control_output_y_grad);        // 14 controller output y [deg]
 
-        // m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
-        // m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
-        // m_SerialStream.write(ballWasLost ? 1.0f : 0.0f);        // 17 ball lost flag
-        // m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
-        // m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
+        m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
+        m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
+        m_SerialStream.write(ballWasLost ? 1.0f : 0.0f);        // 17 ball lost flag
+        m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
+        m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
 
         m_SerialStream.send();
     }

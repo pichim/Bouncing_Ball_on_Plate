@@ -37,7 +37,7 @@ private:
 
     static constexpr float ANGLE_DELTA_LIMIT_GRAD = 20.0f;
 
-    // 333 hz ohne kalman
+    // 333 hz ohne Kalman
     static constexpr float BALL_CTRL_KP = 0.05f;
     static constexpr float BALL_CTRL_KI = 0.004f;
     static constexpr float BALL_CTRL_TAU_V = 0.9f;
@@ -45,6 +45,15 @@ private:
     static constexpr float BALL_CTRL_TAU_R_O = 0.01f;
     static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
     static constexpr float VISION_TIMEOUT = 1.0F; // seconds
+
+    // // 333 hz mit Kalman
+    // static constexpr float BALL_CTRL_KP = 0.05f;
+    // static constexpr float BALL_CTRL_KI = 0.004f;
+    // static constexpr float BALL_CTRL_TAU_V = 0.9f;
+    // static constexpr float BALL_CTRL_TAU_f = 0.1f;
+    // static constexpr float BALL_CTRL_TAU_R_O = 0.01f;
+    // static constexpr float BALL_CTRL_KD = BALL_CTRL_KP * (BALL_CTRL_TAU_V - BALL_CTRL_TAU_f);
+    // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
     static constexpr float PI = 3.14159265358979323846f;
 
