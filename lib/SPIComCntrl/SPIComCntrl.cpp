@@ -317,15 +317,20 @@ void SPIComCntrl::executeTask()
         m_servo_commands[1] = servo2_home_pwm;
         m_servo_commands[2] = servo3_home_pwm;
 
-        if (m_servoD0.isEnabled()) {
-            m_servoD0.disable();
+        // Servos aktiv lassen / wieder aktivieren, damit die Platte wirklich auf Home fährt
+        if (!m_servoD0.isEnabled()) {
+            m_servoD0.enable(servo1_home_pwm);
         }
-        if (m_servoD1.isEnabled()) {
-            m_servoD1.disable();
+        if (!m_servoD1.isEnabled()) {
+            m_servoD1.enable(servo2_home_pwm);
         }
-        if (m_servoD2.isEnabled()) {
-            m_servoD2.disable();
+        if (!m_servoD2.isEnabled()) {
+            m_servoD2.enable(servo3_home_pwm);
         }
+
+        // Regler zurücksetzen
+        m_ballPosCntrl_x.reset(0.0f);
+        m_ballPosCntrl_y.reset(0.0f);
 
         control_loop_counter = 0;
 
@@ -487,22 +492,6 @@ void SPIComCntrl::executeTask()
         m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
 
         m_SerialStream.send();
-    }
-
-    if (m_executeMain) {
-        if (!m_servoD0.isEnabled()) {
-            m_servoD0.enable(DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad));
-        }
-        if (!m_servoD1.isEnabled()) {
-            m_servoD1.enable(DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad));
-        }
-        if (!m_servoD2.isEnabled()) {
-            m_servoD2.enable(DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad));
-        }
-    } else {
-        m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
-        m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
-        m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
     }
 
 }
