@@ -85,29 +85,11 @@ SPIComCntrl::SPIComCntrl()
      * Camera-only Positionsregler:
      * Der PID läuft mit 333 Hz, weil update() nur jedes 3. executeTask() aufgerufen wird.
      */
-    m_ballPosCntrl_x.setup(BALL_CTRL_KP,
-                           BALL_CTRL_KI,
-                           BALL_CTRL_KD,
-                           BALL_CTRL_TAU_f,
-                           BALL_CTRL_TAU_R_O,
-                           CONTROL_TS_S,
-                           -ANGLE_DELTA_LIMIT_GRAD,
-                           ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_x.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, CONTROL_TS_S, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+    m_ballPosCntrl_y.setup(BALL_CTRL_KP, BALL_CTRL_KI, BALL_CTRL_KD, BALL_CTRL_TAU_f, BALL_CTRL_TAU_R_O, CONTROL_TS_S, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
 
-    m_ballPosCntrl_y.setup(BALL_CTRL_KP,
-                           BALL_CTRL_KI,
-                           BALL_CTRL_KD,
-                           BALL_CTRL_TAU_f,
-                           BALL_CTRL_TAU_R_O,
-                           CONTROL_TS_S,
-                           -ANGLE_DELTA_LIMIT_GRAD,
-                           ANGLE_DELTA_LIMIT_GRAD);
-
-    m_ballPosCntrl_x.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f,
-                                          ANGLE_DELTA_LIMIT_GRAD * 0.2f);
-
-    m_ballPosCntrl_y.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f,
-                                          ANGLE_DELTA_LIMIT_GRAD * 0.2f);
+    m_ballPosCntrl_x.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
+    m_ballPosCntrl_y.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
 
     // Trajectory setHold
     // m_trajectory.setHold(0.0f, 0.0f);
@@ -147,6 +129,7 @@ void SPIComCntrl::executeTask()
         return;
     }
     
+    // Button
     user_button.rise(callback(this, &SPIComCntrl::toggleExecuteMainFcn));
     
     // Zeit messen
@@ -188,9 +171,7 @@ void SPIComCntrl::executeTask()
         const float y_meas_mm = m_spiData.data[1];
         const float z_meas_mm = m_spiData.data[2];
 
-        const bool cameraMeasurementValid =
-            (z_meas_mm < CAMERA_Z_LIMIT_MM) &&
-            (z_meas_mm > -CAMERA_Z_LIMIT_MM);
+        const bool cameraMeasurementValid = (z_meas_mm < CAMERA_Z_LIMIT_MM) && (z_meas_mm > -CAMERA_Z_LIMIT_MM);
 
         if (cameraMeasurementValid) {
 
@@ -275,9 +256,7 @@ void SPIComCntrl::executeTask()
      * Der Regler verwendet unten aktuell noch last_x_meas_mm / last_y_meas_mm.
      * Der Observer läuft hier nur im Hintergrund mit.
      */
-    if (m_Imu.isCalibrated() &&
-        m_observerHasFirstMeasurement &&
-        !ballWasLost) {
+    if (m_Imu.isCalibrated() && m_observerHasFirstMeasurement && !ballWasLost) {
 
         const float roll_rad  = m_ImuData.rpy.x();
         const float pitch_rad = m_ImuData.rpy.y();
@@ -379,29 +358,20 @@ void SPIComCntrl::executeTask()
 
             control_loop_counter = 0;
 
-            /*
-             * Camera-only Positionsfehler.
-             *
-             * Später für Observer-Regelung nur diese zwei Zeilen ersetzen:
-             *
-             * const float error_x = xd - m_observerX.getPositionMm();
-             * const float error_y = yd - m_observerY.getPositionMm();
-             */
-            const float error_x = xd - last_x_meas_mm;
-            const float error_y = yd - last_y_meas_mm;
+            // // Camera-only Positionsfehler
+            // const float error_x = xd - last_x_meas_mm;
+            // const float error_y = yd - last_y_meas_mm;
+            // Statischer Kalman Positionsfehler
+            const float error_x = xd - m_observerX.getPositionMm();
+            const float error_y = yd - m_observerY.getPositionMm();
 
             // PID-T1 Positionsregler
             float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
             float control_output_y_grad = m_ballPosCntrl_y.update(error_y);
 
             // Sicherheitsbegrenzung
-            control_output_x_grad = clamp(control_output_x_grad,
-                                          -ANGLE_DELTA_LIMIT_GRAD,
-                                           ANGLE_DELTA_LIMIT_GRAD);
-
-            control_output_y_grad = clamp(control_output_y_grad,
-                                          -ANGLE_DELTA_LIMIT_GRAD,
-                                           ANGLE_DELTA_LIMIT_GRAD);
+            control_output_x_grad = clamp(control_output_x_grad, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
+            control_output_y_grad = clamp(control_output_y_grad, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
 
             // Für Logging speichern
             log_error_x = error_x;
@@ -430,17 +400,9 @@ void SPIComCntrl::executeTask()
                 float servo3_cmd_deg = SERVO3_HOME_DEG + (ikResult.alphaDeg[2] - IK_HOME_DEG);
 
                 // Clamp auf +/-20° um die jeweilige reale Home-Lage
-                servo1_cmd_deg = clamp(servo1_cmd_deg,
-                                       SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                       SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
-
-                servo2_cmd_deg = clamp(servo2_cmd_deg,
-                                       SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                       SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
-
-                servo3_cmd_deg = clamp(servo3_cmd_deg,
-                                       SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG,
-                                       SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO1_HOME_DEG - SERVO_CLAMP_DELTA_DEG, SERVO1_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                servo2_cmd_deg = clamp(servo2_cmd_deg, SERVO2_HOME_DEG - SERVO_CLAMP_DELTA_DEG, SERVO2_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
+                servo3_cmd_deg = clamp(servo3_cmd_deg, SERVO3_HOME_DEG - SERVO_CLAMP_DELTA_DEG, SERVO3_HOME_DEG + SERVO_CLAMP_DELTA_DEG);
 
                 // Harter Sicherheitsclamp auf realen Servo-Bereich
                 servo1_cmd_deg = clamp(servo1_cmd_deg, SERVO_MIN_DEG, SERVO_MAX_DEG);
@@ -491,7 +453,7 @@ void SPIComCntrl::executeTask()
      */
     if (m_SerialStream.startByteReceived()) {
 
-        m_SerialStream.write(dtime_us);                         //  0 Delta time [us]
+        m_SerialStream.write(dtime_us);                         //  0 Delta time [us] -> data.time
 
         m_SerialStream.write(xd);                               //  1 x_des [mm]
         m_SerialStream.write(yd);                               //  2 y_des [mm]
@@ -514,11 +476,11 @@ void SPIComCntrl::executeTask()
         m_SerialStream.write(log_control_output_x_grad);        // 13 controller output x [deg]
         m_SerialStream.write(log_control_output_y_grad);        // 14 controller output y [deg]
 
-        m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
-        m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
-        m_SerialStream.write(ballWasLost ? 1.0f : 0.0f);        // 17 ball lost flag
-        m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
-        m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
+        // m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
+        // m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
+        // m_SerialStream.write(ballWasLost ? 1.0f : 0.0f);        // 17 ball lost flag
+        // m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
+        // m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
 
         m_SerialStream.send();
     }
