@@ -129,8 +129,11 @@ void SPIComCntrl::executeTask()
         return;
     }
     
-    // Button
-    user_button.rise(callback(this, &SPIComCntrl::toggleExecuteMainFcn));
+    // Button callback nur einmal registrieren
+    if (!m_buttonCallbackAttached) {
+        user_button.rise(callback(this, &SPIComCntrl::toggleExecuteMainFcn));
+        m_buttonCallbackAttached = true;
+    }
     
     // Zeit messen
     const microseconds time_us = m_Timer.elapsed_time();

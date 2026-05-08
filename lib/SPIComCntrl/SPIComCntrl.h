@@ -94,6 +94,7 @@ private:
     // Userbutton
     DebounceIn user_button;
     bool m_executeMain{false};
+    bool m_buttonCallbackAttached{false};
 
     void toggleExecuteMainFcn();
 
