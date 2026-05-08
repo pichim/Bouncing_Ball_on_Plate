@@ -116,6 +116,11 @@ SPIComCntrl::SPIComCntrl()
     m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
     m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
 
+    // Servos beim Start deaktiviert lassen
+    m_servoD0.disable();
+    m_servoD1.disable();
+    m_servoD2.disable();
+
     m_Timer.start();
 
     // RealTimeThread::enable() muss nach Konstruktion extern aufgerufen werden
