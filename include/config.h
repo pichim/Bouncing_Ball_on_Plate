@@ -22,6 +22,8 @@
 #define BBOP_IMU_B_ACC {0.0f, 0.0f, 0.0f}
 #define BBOP_IMU_KP (0.1592f * 2.0f * M_PIf)
 #define BBOP_IMU_KI 0.0f
+#define BBOP_DEG_TO_RAD 3.14159265358979323846f / 180.0f
+
 
 // PES Board Servo Connections
 #define BBOP_SERVO_D0_PIN PB_2

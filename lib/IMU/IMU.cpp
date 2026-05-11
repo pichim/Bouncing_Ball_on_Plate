@@ -105,8 +105,8 @@ IMU::ImuData IMU::getImuData()
         m_ImuData.quat = m_Mahony.getOrientationAsQuaternion();
         m_ImuData.rpy = m_Mahony.getOrientationAsRPYAngles();
         // Offsets korrigieren
-        m_ImuData.rpy(0) += (-0.10f +0.7f) * M_PIf / 180.0f;   // roll
-        m_ImuData.rpy(1) += ( 1.90f - 0.93f + 0.12f) * M_PIf / 180.0f;  // pitch
+        m_ImuData.rpy(0) += (-0.10f +0.7f) * BBOP_DEG_TO_RAD;   // roll
+        m_ImuData.rpy(1) += ( 1.90f - 0.93f + 0.12f) * BBOP_DEG_TO_RAD;  // pitch
  
         m_ImuData.tilt = m_Mahony.getTiltAngle();
 
