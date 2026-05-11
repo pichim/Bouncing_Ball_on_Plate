@@ -99,12 +99,17 @@ SPIComCntrl::SPIComCntrl()
 
     // Trajectory setSequence
     static const SequencePoint seq[] = {
-        {  0.0f,  0.0f, 6.0f },
-        { 40.0f,  0.0f, 6.0f },
-        {  0.0f,  0.0f, 6.0f },
-        {-40.0f,  0.0f, 6.0f },
+        {  0.0f,   0.0f, 6.0f },
+        { 35.0f, -20.0f, 6.0f },
+        {-45.0f,  30.0f, 6.0f },
+        { 20.0f,  45.0f, 6.0f },
+        {-30.0f, -35.0f, 6.0f },
+        { 50.0f,  10.0f, 6.0f },
+        {-10.0f,  50.0f, 6.0f },
+        { 25.0f, -50.0f, 6.0f },
     };
-    m_trajectory.setSequence(seq, 4);
+
+    m_trajectory.setSequence(seq, 8);
 
     // Servo Kalibrierung
     m_servoD0.calibratePulseMinMax(SERVO1_PULSE_MIN, SERVO1_PULSE_MAX);
