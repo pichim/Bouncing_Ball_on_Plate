@@ -16,6 +16,8 @@ namespace
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f;
 
+    constexpr float DEG_TO_RAD = 3.14159265358979323846f / 180.0f;
+
     /*
      * executeTask läuft mit 1000 Hz.
      * Der Regler soll mit ca. 333 Hz laufen.
@@ -531,5 +533,5 @@ float SPIComCntrl::PWMToDegree(float pulse_width)
 
 float SPIComCntrl::DegreeToRad(float degree)
 {
-    return degree * (PI / 180.0f);
+    return degree * DEG_TO_RAD;
 }
