@@ -9,9 +9,9 @@ namespace
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
-    constexpr float SERVO1_HOME_DEG = 55.0f + 0.5f;
+    constexpr float SERVO1_HOME_DEG = 55.0f + 1.9f;
     constexpr float SERVO2_HOME_DEG = 55.0f + 2.8f;
-    constexpr float SERVO3_HOME_DEG = 55.0f - 2.1f;
+    constexpr float SERVO3_HOME_DEG = 55.0f - 1.6f;
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f;
@@ -129,7 +129,11 @@ SPIComCntrl::SPIComCntrl()
 SPIComCntrl::~SPIComCntrl() = default;
 
 void SPIComCntrl::executeTask()
-{
+{   
+
+    // IMU für Kalibrierstatus, Observer und Logging/Reply lesen
+    m_ImuData = m_Imu.getImuData();
+
     if (!m_spi_ready) {
         return;
     }
@@ -158,8 +162,8 @@ void SPIComCntrl::executeTask()
     const float xd = filtered_setpoint_x;
     const float yd = filtered_setpoint_y;
 
-    // IMU für Kalibrierstatus, Observer und Logging/Reply lesen
-    m_ImuData = m_Imu.getImuData();
+    // // IMU für Kalibrierstatus, Observer und Logging/Reply lesen
+    // m_ImuData = m_Imu.getImuData();
 
     bool newDataAvailable = false;
     bool validCameraUpdate = false;

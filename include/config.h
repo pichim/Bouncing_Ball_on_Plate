@@ -17,7 +17,7 @@
 #define BBOP_IMU_GYRO_FILTER_FREQUENCY_HZ 60.0f
 #define BBOP_IMU_ACC_FILTER_FREQUENCY_HZ 60.0f
 #define BBOP_IMU_NUM_RUNS_SKIP 1000 // dont make this shorter than 1000 milliseconds, the openlager needs 1 second to start up (if used for logging)
-#define BBOP_IMU_NUM_RUNS_FOR_AVERAGE 1000
+#define BBOP_IMU_NUM_RUNS_FOR_AVERAGE 3000
 #define BBOP_IMU_DO_USE_STATIC_ACC_CALIBRATION true // if this is true then averaged acc gets overwritten by BBOP_IMU_B_ACC
 #define BBOP_IMU_B_ACC {0.0f, 0.0f, 0.0f}
 #define BBOP_IMU_KP (0.1592f * 2.0f * M_PIf)
