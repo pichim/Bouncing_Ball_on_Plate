@@ -12,6 +12,7 @@ enum class TrajectoryMode
 {
     Hold,
     Circle,
+    FigureEight,
     Sequence,
 };
 
@@ -31,7 +32,7 @@ struct SequencePoint
 {
     float x_mm = 0.0f;
     float y_mm = 0.0f;
-    float dwell_s = 3.0f; // <-- das hier ist Sekunden
+    float dwell_s = 3.0f; // Sekunden
 };
 
 class TrajectoryGenerator
@@ -49,6 +50,16 @@ public:
         m_mode = TrajectoryMode::Circle;
         m_radius_mm = radius_mm;
         m_freq_hz = freq_hz;
+        m_t_s = 0.0f;
+    }
+
+    void setFigureEight(float radius_x_mm, float radius_y_mm, float freq_hz)
+    {
+        m_mode = TrajectoryMode::FigureEight;
+        m_fig8_radius_x_mm = radius_x_mm;
+        m_fig8_radius_y_mm = radius_y_mm;
+        m_fig8_freq_hz = freq_hz;
+        m_t_s = 0.0f;
     }
 
     bool setSequence(const SequencePoint* points, int count)
@@ -110,6 +121,28 @@ public:
                 break;
             }
 
+            case TrajectoryMode::FigureEight:
+            {
+                m_t_s += dt_s;
+                const float w = 2.0f * M_PIf * m_fig8_freq_hz;
+
+                const float wt = w * m_t_s;
+
+                // Liegende 8
+                ref.x_mm = m_fig8_radius_x_mm * std::sin(wt);
+                ref.y_mm = m_fig8_radius_y_mm * std::sin(2.0f * wt);
+
+                // Geschwindigkeit
+                ref.vx_mm_s = m_fig8_radius_x_mm * w * std::cos(wt);
+                ref.vy_mm_s = m_fig8_radius_y_mm * 2.0f * w * std::cos(2.0f * wt);
+
+                // Beschleunigung
+                ref.ax_mm_s2 = -m_fig8_radius_x_mm * w * w * std::sin(wt);
+                ref.ay_mm_s2 = -m_fig8_radius_y_mm * 4.0f * w * w * std::sin(2.0f * wt);
+
+                break;
+            }
+
             case TrajectoryMode::Sequence:
             {
                 if (m_sequence_count == 0)
@@ -141,7 +174,14 @@ private:
     // Circle
     float m_radius_mm = 20.0f;
     float m_freq_hz   = 0.1f;
-    float m_t_s       = 0.0f;
+
+    // Figure Eight
+    float m_fig8_radius_x_mm = 30.0f;
+    float m_fig8_radius_y_mm = 20.0f;
+    float m_fig8_freq_hz     = 0.1f;
+
+    // Common time for circle and figure eight
+    float m_t_s = 0.0f;
 
     // Sequence
     SequencePoint m_sequence[TRAJ_MAX_SEQUENCE_STEPS] = {};

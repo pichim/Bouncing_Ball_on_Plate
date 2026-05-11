@@ -91,25 +91,28 @@ SPIComCntrl::SPIComCntrl()
     m_ballPosCntrl_x.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
     m_ballPosCntrl_y.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
 
-    // Trajectory setHold
+    // // Trajectory setHold
     // m_trajectory.setHold(0.0f, 0.0f);
 
-    // Trajectory setCircle
-    // m_trajectory.setCircle(35.0f, 0.2f);
+    // // Trajectory setCircle
+    // m_trajectory.setCircle(100.0f, 1.0f);
 
-    // Trajectory setSequence
-    static const SequencePoint seq[] = {
-        {  0.0f,   0.0f, 18.0f },
-        { 35.0f, -20.0f, 6.0f },
-        {-45.0f,  30.0f, 6.0f },
-        { 20.0f,  45.0f, 6.0f },
-        {-30.0f, -35.0f, 6.0f },
-        { 50.0f,  10.0f, 6.0f },
-        {-10.0f,  50.0f, 6.0f },
-        { 25.0f, -50.0f, 6.0f },
-    };
+    // Trajectory setFigureEight
+    m_trajectory.setFigureEight(70.0f, 70.0f, 0.3f);
 
-    m_trajectory.setSequence(seq, 8);
+    // // Trajectory setSequence
+    // static const SequencePoint seq[] = {
+    //     {  0.0f,   0.0f, 18.0f },
+    //     { 35.0f, -20.0f, 6.0f },
+    //     {-45.0f,  30.0f, 6.0f },
+    //     { 20.0f,  45.0f, 6.0f },
+    //     {-30.0f, -35.0f, 6.0f },
+    //     { 50.0f,  10.0f, 6.0f },
+    //     {-10.0f,  50.0f, 6.0f },
+    //     { 25.0f, -50.0f, 6.0f },
+    // };
+
+    // m_trajectory.setSequence(seq, 8);
 
     // Servo Kalibrierung
     m_servoD0.calibratePulseMinMax(SERVO1_PULSE_MIN, SERVO1_PULSE_MAX);
