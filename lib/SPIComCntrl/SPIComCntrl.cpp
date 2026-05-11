@@ -99,7 +99,7 @@ SPIComCntrl::SPIComCntrl()
 
     // Trajectory setSequence
     static const SequencePoint seq[] = {
-        {  0.0f,   0.0f, 6.0f },
+        {  0.0f,   0.0f, 18.0f },
         { 35.0f, -20.0f, 6.0f },
         {-45.0f,  30.0f, 6.0f },
         { 20.0f,  45.0f, 6.0f },
