@@ -113,7 +113,7 @@ IMU::ImuData IMU::getImuData()
     // Raw angles before mechanical offset correction
     Eigen::Vector3f rpy_raw = m_Mahony.getOrientationAsRPYAngles();
 
-///////Temporary debug print for IMU offset tuning/////////////////////////////////    
+///////Print raw IMU angles [rad]//////////////////////////////////////////////////    
     // static uint32_t imu_print_cntr = 0;
     // imu_print_cntr++;
     // if (imu_print_cntr >= 500) {   // bei 1 kHz ungefähr alle 0.5 s
@@ -123,7 +123,7 @@ IMU::ImuData IMU::getImuData()
     //         rpy_raw(0) * BBOP_RAD_TO_DEG,
     //         rpy_raw(1) * BBOP_RAD_TO_DEG);
     // }
-///////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
 
     // Use raw values first
     m_ImuData.rpy = rpy_raw;
@@ -134,7 +134,7 @@ IMU::ImuData IMU::getImuData()
  
     m_ImuData.tilt = m_Mahony.getTiltAngle();
 
-///////Temporary debug print for IMU offset tuning/////////////////////////////////    
+///////Print calibrated IMU angles [rad]//////////////////////////////////////////// 
     // if (imu_print_cntr >= 500) {   // bei 1 kHz ungefähr alle 0.5 s
     //     imu_print_cntr = 0;
 
