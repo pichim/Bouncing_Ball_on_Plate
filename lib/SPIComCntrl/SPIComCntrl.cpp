@@ -498,6 +498,9 @@ void SPIComCntrl::executeTask()
         m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
         m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
 
+        m_SerialStream.write(m_ImuData.rpy.x()); // 20 roll IMU [rad]
+        m_SerialStream.write(m_ImuData.rpy.y()); // 21 pitch IMU [rad]
+
         m_SerialStream.send();
     }
 
