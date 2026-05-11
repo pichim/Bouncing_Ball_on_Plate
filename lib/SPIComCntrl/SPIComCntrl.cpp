@@ -93,12 +93,13 @@ SPIComCntrl::SPIComCntrl()
 
     // // Trajectory setHold
     // m_trajectory.setHold(0.0f, 0.0f);
+    // m_trajectory.setHeightSine(110.5f, 20.0f, 3.5f); // Sinus für Bounce
+    
+    // Trajectory setCircle
+    m_trajectory.setCircle(100.0f, 1.0f);
 
-    // // Trajectory setCircle
-    // m_trajectory.setCircle(100.0f, 1.0f);
-
-    // Trajectory setFigureEight
-    m_trajectory.setFigureEight(70.0f, 70.0f, 0.3f);
+    // // Trajectory setFigureEight
+    // m_trajectory.setFigureEight(70.0f, 70.0f, 0.3f);
 
     // // Trajectory setSequence
     // static const SequencePoint seq[] = {
@@ -413,6 +414,7 @@ void SPIComCntrl::executeTask()
             m_ikInput.pitch = DegreeToRad(control_output_x_grad);
             m_ikInput.roll  = -DegreeToRad(control_output_y_grad);
             m_ikInput.h     = 110.5f;
+            // m_ikInput.h     = traj.h_mm; // Aktivieren für Bounce
 
             InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 

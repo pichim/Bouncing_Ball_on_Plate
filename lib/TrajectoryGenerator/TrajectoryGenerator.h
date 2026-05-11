@@ -26,6 +26,11 @@ struct TrajectoryRef
 
     float ax_mm_s2 = 0.0f;
     float ay_mm_s2 = 0.0f;
+
+    // Höhe der Platte
+    float h_mm = 110.5f;
+    float vh_mm_s = 0.0f;
+    float ah_mm_s2 = 0.0f;
 };
 
 struct SequencePoint
@@ -77,6 +82,41 @@ public:
         return true;
     }
 
+    /*
+     * Höhe konstant halten.
+     * Beispiel:
+     * m_trajectory.setHeightHold(110.5f);
+     */
+    void setHeightHold(float h_mm)
+    {
+        m_height_sine_enabled = false;
+        m_height_home_mm = h_mm;
+        m_height_amplitude_mm = 0.0f;
+        m_height_freq_hz = 0.0f;
+        m_height_t_s = 0.0f;
+    }
+
+    /*
+     * Höhe sinusförmig anregen:
+     *
+     * h(t) = h_home + A * sin(2*pi*f*t)
+     *
+     * h_home_mm: mittlere Höhe
+     * amplitude_mm: Amplitude A in mm
+     * freq_hz: Frequenz f in Hz
+     *
+     * Beispiel:
+     * m_trajectory.setHeightSine(110.5f, 10.0f, 3.0f);
+     */
+    void setHeightSine(float h_home_mm, float amplitude_mm, float freq_hz)
+    {
+        m_height_sine_enabled = true;
+        m_height_home_mm = h_home_mm;
+        m_height_amplitude_mm = amplitude_mm;
+        m_height_freq_hz = freq_hz;
+        m_height_t_s = 0.0f;
+    }
+
     void setMode(TrajectoryMode mode)
     {
         m_mode = mode;
@@ -96,6 +136,12 @@ public:
     {
         TrajectoryRef ref;
 
+        /*
+         * Standardhöhe setzen.
+         * Falls kein Höhen-Sinus aktiv ist, bleibt h_mm konstant.
+         */
+        ref.h_mm = m_height_home_mm;
+
         switch (m_mode)
         {
             case TrajectoryMode::Hold:
@@ -109,15 +155,16 @@ public:
             {
                 m_t_s += dt_s;
                 const float w = 2.0f * M_PIf * m_freq_hz;
+                const float wt = w * m_t_s;
 
-                ref.x_mm = m_radius_mm * std::cos(w * m_t_s);
-                ref.y_mm = m_radius_mm * std::sin(w * m_t_s);
+                ref.x_mm = m_radius_mm * std::cos(wt);
+                ref.y_mm = m_radius_mm * std::sin(wt);
 
-                ref.vx_mm_s = -m_radius_mm * w * std::sin(w * m_t_s);
-                ref.vy_mm_s =  m_radius_mm * w * std::cos(w * m_t_s);
+                ref.vx_mm_s = -m_radius_mm * w * std::sin(wt);
+                ref.vy_mm_s =  m_radius_mm * w * std::cos(wt);
 
-                ref.ax_mm_s2 = -m_radius_mm * w * w * std::cos(w * m_t_s);
-                ref.ay_mm_s2 = -m_radius_mm * w * w * std::sin(w * m_t_s);
+                ref.ax_mm_s2 = -m_radius_mm * w * w * std::cos(wt);
+                ref.ay_mm_s2 = -m_radius_mm * w * w * std::sin(wt);
                 break;
             }
 
@@ -125,7 +172,6 @@ public:
             {
                 m_t_s += dt_s;
                 const float w = 2.0f * M_PIf * m_fig8_freq_hz;
-
                 const float wt = w * m_t_s;
 
                 // Liegende 8
@@ -149,6 +195,7 @@ public:
                     break;
 
                 m_seq_elapsed_s += dt_s;
+
                 if (m_seq_elapsed_s >= m_sequence[m_seq_index].dwell_s)
                 {
                     m_seq_elapsed_s = 0.0f;
@@ -159,6 +206,30 @@ public:
                 ref.y_mm = m_sequence[m_seq_index].y_mm;
                 break;
             }
+        }
+
+        /*
+         * Höhen-Sinus separat berechnen.
+         * Dadurch kann die Höhe unabhängig von x/y bewegt werden.
+         */
+        if (m_height_sine_enabled)
+        {
+            m_height_t_s += dt_s;
+
+            const float w_h = 2.0f * M_PIf * m_height_freq_hz;
+            const float wt_h = w_h * m_height_t_s;
+
+            ref.h_mm = m_height_home_mm
+                     + m_height_amplitude_mm * std::sin(wt_h);
+
+            ref.vh_mm_s = m_height_amplitude_mm
+                         * w_h
+                         * std::cos(wt_h);
+
+            ref.ah_mm_s2 = -m_height_amplitude_mm
+                          * w_h
+                          * w_h
+                          * std::sin(wt_h);
         }
 
         return ref;
@@ -182,6 +253,13 @@ private:
 
     // Common time for circle and figure eight
     float m_t_s = 0.0f;
+
+    // Height sine
+    bool  m_height_sine_enabled = false;
+    float m_height_home_mm = 110.5f;
+    float m_height_amplitude_mm = 0.0f;
+    float m_height_freq_hz = 0.0f;
+    float m_height_t_s = 0.0f;
 
     // Sequence
     SequencePoint m_sequence[TRAJ_MAX_SEQUENCE_STEPS] = {};
