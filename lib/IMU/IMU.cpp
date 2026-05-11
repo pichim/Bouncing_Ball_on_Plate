@@ -114,28 +114,35 @@ IMU::ImuData IMU::getImuData()
     Eigen::Vector3f rpy_raw = m_Mahony.getOrientationAsRPYAngles();
 
 ///////Temporary debug print for IMU offset tuning/////////////////////////////////    
-    static uint32_t imu_print_cntr = 0;
-    imu_print_cntr++;
+    // static uint32_t imu_print_cntr = 0;
+    // imu_print_cntr++;
+    // if (imu_print_cntr >= 500) {   // bei 1 kHz ungefähr alle 0.5 s
+    //     imu_print_cntr = 0;
 
-
+    //     printf("IMU RAW: roll = %.3f deg, pitch = %.3f deg\n",
+    //         rpy_raw(0) * BBOP_RAD_TO_DEG,
+    //         rpy_raw(1) * BBOP_RAD_TO_DEG);
+    // }
 ///////////////////////////////////////////////////////////////////////////////////
 
     // Use raw values first
     m_ImuData.rpy = rpy_raw;
 
     // Offsets korrigieren
-    m_ImuData.rpy(0) += (0.073f) * BBOP_DEG_TO_RAD;     // roll
+    m_ImuData.rpy(0) += (0.073f) * BBOP_DEG_TO_RAD;      // roll
     m_ImuData.rpy(1) += (-0.939f) * BBOP_DEG_TO_RAD;     // pitch
  
     m_ImuData.tilt = m_Mahony.getTiltAngle();
 
-    if (imu_print_cntr >= 500) {   // bei 1 kHz ungefähr alle 0.5 s
-        imu_print_cntr = 0;
+///////Temporary debug print for IMU offset tuning/////////////////////////////////    
+    // if (imu_print_cntr >= 500) {   // bei 1 kHz ungefähr alle 0.5 s
+    //     imu_print_cntr = 0;
 
-        printf("IMU RAW: roll = %.3f deg, pitch = %.3f deg\n",
-             m_ImuData.rpy(0) * BBOP_RAD_TO_DEG,
-            m_ImuData.rpy(1) * BBOP_RAD_TO_DEG);
-    }
+    //     printf("IMU Mahony: roll = %.3f deg, pitch = %.3f deg\n",
+    //         m_ImuData.rpy(0) * BBOP_RAD_TO_DEG,
+    //         m_ImuData.rpy(1) * BBOP_RAD_TO_DEG);
+    // }
+///////////////////////////////////////////////////////////////////////////////////
 
     return m_ImuData;
 }
