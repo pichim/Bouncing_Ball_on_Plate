@@ -56,6 +56,8 @@ namespace
     // timeout
     int missing_data_counter = 0;
     bool ballWasLost = true;
+
+    constexpr float DEG_TO_RAD = M_PI / 180.0f;
 }
 
 SPIComCntrl::SPIComCntrl()
@@ -147,6 +149,15 @@ SPIComCntrl::SPIComCntrl()
     // if (!m_servoD2.isEnabled()) {
     //     m_servoD2.enable(m_servo_commands[2]);
     // }
+
+    // Alle Servos explizit auf 0 PWM setzen
+    m_servoD0.setPulseWidth(0.0f);
+    m_servoD1.setPulseWidth(0.0f);
+    m_servoD2.setPulseWidth(0.0f);
+    
+    m_servoD0.disable();
+    m_servoD1.disable();
+    m_servoD2.disable();
 
     // Verdrehungswinkel definieren Kamera zu Base
     // camera_offset_angle_deg = 90.0f + 14.73f;
@@ -390,7 +401,6 @@ void SPIComCntrl::executeTask()
                 m_ikInput.roll  = -DegreeToRad(control_output_y_grad);
                 m_ikInput.h     = 110.5f;
 
-
                 InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 
                 // WICHTIG: IK-Ergebnis prüfen, bevor alphaDeg verwendet wird
@@ -435,13 +445,17 @@ void SPIComCntrl::executeTask()
         } else {
 
             // Ball weg, Servos in Mittelstellung halten
-            // m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
-            // m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
-            // m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
-            m_servoD0.disable();
-            m_servoD1.disable();
-            m_servoD2.disable();
+            m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+            m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+            m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
+            // m_servoD0.disable();
+            // m_servoD1.disable();
+            // m_servoD2.disable();
         }
+
+        // m_servo_commands[0] = DegreeToPWM(SERVO1_HOME_DEG, BBOP_SERVO1_angle_range_grad);
+        // m_servo_commands[1] = DegreeToPWM(SERVO2_HOME_DEG, BBOP_SERVO2_angle_range_grad);
+        // m_servo_commands[2] = DegreeToPWM(SERVO3_HOME_DEG, BBOP_SERVO3_angle_range_grad);
 
         // Servo ansteuern
         m_servoD0.setPulseWidth(m_servo_commands[0]);
@@ -578,6 +592,6 @@ float SPIComCntrl::PWMToDegree(float pulse_width)
 
 float SPIComCntrl::DegreeToRad(float degree)
 {
-    float rad = degree * (M_PIf / 180.0f);
+    float rad = degree * DEG_TO_RAD;
     return rad;
 }
