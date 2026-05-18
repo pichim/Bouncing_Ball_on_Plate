@@ -20,29 +20,37 @@ observer::~observer() {}
 Matrix<float, N, 1> observer::do_step(float u, float y)
 {
     /*
-     * Kamera-Totzeit:
-     * nd = Tt / Ts = 0.016 / 0.001 = 16
+     * Simple camera delay compensation:
      *
-     * y_delayed ist der Messwert von vor 16 Observer-Schritten.
-     * Am Anfang ist der Buffer mit 0 initialisiert.
+     * Observer Ts = 0.001 s
+     * Camera delay Tt = 0.016 s
+     * nd = Tt / Ts = 16
+     *
+     * e_y = y - C * x_hat(k - nd)
      */
 
-    float y_delayed = m_y_buffer[m_y_buffer_index];
+    m_x_hat_buffer[m_index] = m_x_hat;
+    
+    int delayed_index = m_index - nd;
 
-    // aktuellen Messwert in Buffer schreiben
-    m_y_buffer[m_y_buffer_index] = y;
-
-    // Buffer-Index weiterschalten
-    m_y_buffer_index++;
-
-    if (m_y_buffer_index >= nd) {
-        m_y_buffer_index = 0;
+    if(delayed_index < 0){
+        delayed_index += HIST_SIZE;
     }
 
-    // Observer mit verzögertem Messwert
-    m_dxdt_hat = (m_A - m_H * m_C) * m_x_hat + m_B * u + m_H * y_delayed;
-    // m_dxdt_hat = (m_A - m_H * m_C) * m_x_hat + m_B * u + m_H * y;
+    float y_hat_delayed = (m_C * m_x_hat_buffer[delayed_index])(0, 0);
+
+    float innovation = y - y_hat_delayed;
+
+    m_dxdt_hat = m_A * m_x_hat + m_B * u + m_H * innovation;
+    
     integrate_states();
+    
+    m_index++;
+
+    if(m_index >= HIST_SIZE){
+        m_index = 0;
+    }
+
     return m_x_hat;
 }
 
@@ -57,8 +65,11 @@ void observer::reset(float position_mm, float velocity_mm_s, float disturbance_r
 
     m_dxdt_hat.setZero();
 
-    m_y_buffer.fill(0.0f);
-    m_y_buffer_index = 0;
+    for (int i = 0; i < HIST_SIZE; i++) {
+        m_x_hat_buffer[i] = m_x_hat;
+    }
+
+    m_index = 0;
 }
 
 float observer::getPositionMm() const
@@ -85,9 +96,12 @@ void observer::init()
     m_H.setZero();
     m_dxdt_hat.setZero();
     m_x_hat.setZero();
+    
+    for (int i = 0; i < HIST_SIZE; i++) {
+        m_x_hat_buffer[i].setZero();
+    }
 
-    m_y_buffer.fill(0.0f);
-    m_y_buffer_index = 0;
+    m_index = 0;
 
     // --- Matlab ---
     // set A, B, C, H matrices of observer

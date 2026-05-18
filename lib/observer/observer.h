@@ -1,9 +1,7 @@
 #pragma once
 
 #include <Eigen/Dense>
-#include <cstdint>
 #include "mbed.h"
-#include <array>
 
 #define N 3      // number of states
 #define N_meas 1 // number measurements
@@ -29,11 +27,12 @@ public:
 private:
 
     static constexpr int nd = 16;
-
-    std::array<float, nd> m_y_buffer = {};
-    int m_y_buffer_index = 0;
+    static constexpr int HIST_SIZE = nd + 1;
     
     float m_Ts;
+    
+    int m_index;
+    Matrix<float, N, 1> m_x_hat_buffer[HIST_SIZE];
     
     Matrix<float, N, N> m_A;
     Matrix<float, N, 1> m_B;
