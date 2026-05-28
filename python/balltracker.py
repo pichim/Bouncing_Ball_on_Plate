@@ -159,25 +159,24 @@ class CameraProcessor:
                     x_px, y_px, r = self.detect_ball(frame_process)
                     f_avg = (self.new_K[0, 0] + self.new_K[1, 1]) / 2.0
 
+                    # variablen zu distorted übergeben sodass der code mit beiden methoden funktioniert
+                    x_distorted, y_distorted, r_dist = x_px, y_px, r
+
 
                 else:
-                    # --- METHODE 2: Zwei-Punkte-Entzerrung ---
+                    # --- METHODE: Zwei-Punkte-Entzerrung ---
+                    
                     frame_process = frame
                     x_distorted, y_distorted, r_dist = self.detect_ball(frame_process)
+                    # processing_time_ms = (time.time() - start_time) * 1000
                     
                     if r_dist > 5:
-                        # Wir definieren zwei Punkte im VERZERRTEN Bild:
-                        # 1. Den Mittelpunkt
-                        # 2. Einen Punkt am rechten Rand des Balls
-                        # pts_distorted = np.array([[[x_distorted, y_distorted], 
-                        #                            [x_distorted + r_dist, y_distorted]]], dtype=np.float64)
 
-                        # test
-                        # 1. Optisches Zentrum des verzerrten Bildes (aus deiner K-Matrix)
+                        # 1. Optisches Zentrum des verzerrten Bildes
                         cx_dist = self.K[0, 2]
                         cy_dist = self.K[1, 2]
 
-                        # 2. Vektor vom Bildzentrum zum Ball berechnen
+                        # 2. Vektor vom Bildzentrum zum Ball
                         dx = x_distorted - cx_dist
                         dy = y_distorted - cy_dist
                         dist_center = math.hypot(dx, dy)
@@ -188,18 +187,18 @@ class CameraProcessor:
                             y_edge_dist = y_distorted
                         else:
                             # 3. Tangentialvektor berechnen (90 Grad gedreht zum Radiusvektor)
-                            # Normieren auf Länge 1, dann mit r_dist multiplizieren
+                            # Normieren auf Länge 1
                             tan_x = -dy / dist_center
                             tan_y = dx / dist_center
                             
-                            # 4. Den korrekten Randpunkt setzen
+                            # 4. Randpunkt berechnen asu Ballmittelpunkt + (Tangentialvektor (normiert) * Radius)
                             x_edge_dist = x_distorted + (tan_x * r_dist)
                             y_edge_dist = y_distorted + (tan_y * r_dist)
 
                         # 5. Punkte für die Entzerrung übergeben
                         pts_distorted = np.array([[[x_distorted, y_distorted], 
                                                 [x_edge_dist, y_edge_dist]]], dtype=np.float64)
-                        # test
+
                         
                         # Beide Punkte gleichzeitig entzerren!
                         pts_undistorted = cv2.fisheye.undistortPoints(
@@ -209,15 +208,18 @@ class CameraProcessor:
                         # Entzerrter Mittelpunkt
                         x_px = pts_undistorted[0][0][0]
                         y_px = pts_undistorted[0][0][1]
+                        # print(f"undistorted center: ({x_px:.1f}, {y_px:.1f})")
                         
                         # Entzerrter Randpunkt
                         x_edge = pts_undistorted[0][1][0]
                         y_edge = pts_undistorted[0][1][1]
                         
+                processing_time_ms = (time.time() - start_time) * 1000
+
 
                 # --- BERECHNUNG ---
                 if r_dist > 5:
-                    # Parameter der NEUEN Kameramatrix
+                    # Parameter der Kameramatrix
                     fx = self.new_K[0, 0]
                     fy = self.new_K[1, 1]
                     cx = self.new_K[0, 2]
@@ -225,21 +227,19 @@ class CameraProcessor:
 
                     R_real = 20.0  # mm
 
-                    # 1. Wir bauen zwei 3D-Richtungsvektoren (Z = 1.0 Ebene)
+                    # 1. 3D-Richtungsvektoren (Z = 1.0 Ebene)
                     # Vektor zum Zentrum des Balls
                     v_center = np.array([(x_px - cx) / fx, (y_px - cy) / fy, 1.0])
                     # Vektor zur Außenkante des Balls
                     v_edge = np.array([(x_edge - cx) / fx, (y_edge - cy) / fy, 1.0])
 
-                    # 2. Vektoren normieren (Länge auf exakt 1.0 setzen)
+                    # 2. Vektoren normieren
                     norm_center = np.linalg.norm(v_center)
                     norm_edge = np.linalg.norm(v_edge)
                     v_center_norm = v_center / norm_center
                     v_edge_norm = v_edge / norm_edge
 
-                    # 3. Den echten 3D-Winkel zwischen Zentrum und Kante berechnen
-                    # Das ist der mathematisch perfekte Sichtwinkel, unbeeindruckt von Pixel-Streckungen!
-                    # np.clip sichert uns gegen Float-Rundungsfehler ab
+                    # 3. 3D-Winkel zwischen center und rand-vektor berechnen
                     cos_alpha = np.clip(np.dot(v_center_norm, v_edge_norm), -1.0, 1.0)
                     alpha = math.acos(cos_alpha)
 
@@ -249,11 +249,17 @@ class CameraProcessor:
                         D = R_real / math.sin(alpha)
 
                         # 5. X, Y, Z berechnen
-                        # Da unser Vektor 'v_center_norm' die Richtung vorgibt und die Länge 1 hat,
-                        # müssen wir ihn nur noch mit der Distanz D "langziehen".
+                        # v_center_norm zeigt in die Richtung des Balls, D gibt an, wie weit weg er ist.
                         X = D * v_center_norm[0]
                         Y = D * v_center_norm[1]
-                        Z = D * v_center_norm[2]  # Das ist jetzt ein absolut stabiles Z!
+                        Z = D * v_center_norm[2]
+
+                        # 6. Master-Offset: Optisches Zentrum direkt zum mechanischen Zentrum
+                        # Plattenmitte (681, 505) - Abstand zum optischen Nullpunkt der Kamera-Matrix.
+                            
+                        Zref = 185.7  # mm, Referenzhöhe für die Offset-Kompensation (z.B. Höhe der Platte)
+                        X -= (669 - self.new_K[0, 2]) * Zref / fx
+                        Y -= (509 - self.new_K[1, 2]) * Zref / fy
 
                         # --- Start der Z-Kompensation (Entzerrung) ---
                         # 1-3 auskommentierung if entzerrung nicht gewunscht
@@ -273,22 +279,22 @@ class CameraProcessor:
                         # 3. Z korrigieren: Gemessener Wert minus die "Beule" plus Referenzhöhe (c0)
                         Z = Z - (z_modell)
 
-                    # else:
-                    #     # --- METHODE 2: Punkt-Entzerrung ---
-                    #     frame_process = frame
-                    #     x_distorted, y_distorted, r = self.detect_ball(frame_process)
-                    
-                #     if r > 5:
-                #         pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
-                #         undistorted_pt = cv2.fisheye.undistortPoints(
-                #             pt, self.K, self.D, P=self.new_K
-                #         )
-                #         x_px = undistorted_pt[0][0][0]
-                #         y_px = undistorted_pt[0][0][1]
-                #         f_avg = (self.K[0, 0] + self.K[1, 1]) / 2.0
+                # else:
+                #     # --- METHODE 2: Punkt-Entzerrung ---
+                #     frame_process = frame
+                #     x_distorted, y_distorted, r = self.detect_ball(frame_process)
+                
+                # if r > 5:
+                #     pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
+                #     undistorted_pt = cv2.fisheye.undistortPoints(
+                #         pt, self.K, self.D, P=self.new_K
+                #     )
+                #     x_px = undistorted_pt[0][0][0]
+                #     y_px = undistorted_pt[0][0][1]
+                #     f_avg = (self.K[0, 0] + self.K[1, 1]) / 2.0
 
 
-                # --- BERECHNUNG (für beide Methoden gleich) ---
+                # # --- BERECHNUNG (für beide Methoden gleich) ---
                 # if r > 5:  # valid detection
                 #     # Parameter aus der NEUEN Kameramatrix auslesen
                 #     fx = self.new_K[0, 0]
@@ -304,8 +310,8 @@ class CameraProcessor:
                 #     X = (x_px - cx) * Z / fx
                 #     Y = (y_px - cy) * Z / fy
 
-                    # Zeitmessung abschließen
-                    processing_time_ms = (time.time() - start_time) * 1000
+                #     # Zeitmessung abschließen
+                    
 
                     # print(f"Modus: {'Vollbild' if FULL_FRAME_UNDISTORT else 'Punkt'} | "
                     #     f"Zeit: {processing_time_ms:.1f} ms | "
@@ -344,7 +350,7 @@ class CameraProcessor:
         # upper_orange = np.array([20, 255, 255])
 
         # light
-        lower_orange = np.array([8, 130, 80])
+        lower_orange = np.array([8, 130, 50])
         upper_orange = np.array([18, 255, 170])   
 
         # dark
@@ -357,21 +363,44 @@ class CameraProcessor:
 
         if contours:
             largest = max(contours, key=cv2.contourArea)
+
+            # circle detection
             ((x, y), radius) = cv2.minEnclosingCircle(largest)
+
+
             if radius > 5:
                 center = (int(x), int(y))
                 cv2.circle(frame, center, int(radius), (0, 255, 0), 2)
                 cv2.circle(frame, center, 2, (0, 0, 255), 3)
+
+            # elipse detection
+            # if len(largest) >= 5:
+            #     ellipse = cv2.fitEllipse(largest)
+            #     # ellipse liefert: Zentrum(x,y), Achsen(breite, höhe), Rotationswinkel
+            #     (x, y), (width, height), angle = ellipse
+                
+            #     # Der "stabile" Radius ist die Hälfte der kürzeren Achse (Minor Axis)
+            #     radius = min(width, height) / 2.0
+                
+            #     if radius > 5:
+            #         center = (int(x), int(y))
+            #         # Zeichnet die exakte Ellipse (sieht in der Präsentation super aus!)
+            #         cv2.ellipse(frame, ellipse, (0, 255, 0), 2) 
+            #         cv2.circle(frame, center, 2, (0, 0, 255), 3) # Mittelpunkt
         
         # Höhe und Breite des Frames abfragen, Zentrum berechnen
         h, w = frame.shape[:2]
         cx, cy = w // 2, h // 2
+        # print(f"Breite: {w}, cx: {cx}")
+        # print(f"Höhe: {h}, cy: {cy}")
 
         new_cx = int(self.new_K[0, 2])
         new_cy = int(self.new_K[1, 2])
 
         # Rotes Kreuz (+) im Bildzentrum einzeichnen
         cv2.drawMarker(frame, (new_cx, new_cy), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+        cv2.drawMarker(frame, (cx, cy), (255, 0, 0), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+        cv2.drawMarker(frame, (683, 505), (0, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
 
         # Save frame for website (with drawings already on it)
         if ENABLE_WEB_STREAM:

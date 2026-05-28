@@ -221,12 +221,13 @@ while True:
         current_fps = fps_counter / elapsed
 
         if elapsed >= 1.0:  # every 1 second
-            
+            # print(processing_time_ms)
+
             fps_counter = 0
             fps_start_time = now
             # print(f"BALL FPS: {current_fps:.2f}")
             if x is not None and y is not None and z is not None:
-                print(x, y, z)
+               print(x, y, z)
             # print("filtered setpoint x: " + str(received_data.data[2]))
             # print("filtered setpoint y: " + str(received_data.data[3]))
 
@@ -235,7 +236,7 @@ while True:
         else:
             x, y, z, processing_time_ms = 0.0, 0.0, 0.0, 0.0
         #print(x, y, z)
-
+        
         try:
             # ---------------- First transfer: ARM-ONLY (0x56 + zeros) ----------------
             t_xfer1_start = time.perf_counter()
@@ -280,7 +281,7 @@ while True:
                 else:
                     time.sleep(remaining_us / 1_000_000.0)
                     sleep_us = remaining_us
-                    print(f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us | Failed: {received_data.failed_count}")
+                    # print(f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us | Failed: {received_data.failed_count}")
                 continue
 
             rx: List[int] = rx2
