@@ -91,15 +91,15 @@ SPIComCntrl::SPIComCntrl()
     m_ballPosCntrl_x.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
     m_ballPosCntrl_y.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
 
-    // // Trajectory setHold
-    // m_trajectory.setHold(0.0f, 0.0f);
-    // m_trajectory.setHeightSine(110.5f, 20.0f, 3.5f); // Sinus für Bounce
+    // Trajectory setHold
+    m_trajectory.setHold(0.0f, 0.0f);
+    m_trajectory.setHeightSine(110.5f, 20.0f, 3.5f); // Sinus für Bounce
     
-    // Trajectory setCircle
-    m_trajectory.setCircle(100.0f, 1.0f);
+    // // Trajectory setCircle
+    // m_trajectory.setCircle(50.0f, 0.35f);
 
     // // Trajectory setFigureEight
-    // m_trajectory.setFigureEight(70.0f, 70.0f, 0.3f);
+    // m_trajectory.setFigureEight(50.0f, 25.0f, 0.35f);
 
     // // Trajectory setSequence
     // static const SequencePoint seq[] = {
@@ -170,6 +170,9 @@ void SPIComCntrl::executeTask()
 
     const float xd = filtered_setpoint_x;
     const float yd = filtered_setpoint_y;
+    // const float xd = traj.x_mm;
+    // const float yd = traj.y_mm;
+
 
     // // IMU für Kalibrierstatus, Observer und Logging/Reply lesen
     // m_ImuData = m_Imu.getImuData();
@@ -209,7 +212,7 @@ void SPIComCntrl::executeTask()
                  */
                 m_observerX.reset(last_x_meas_mm, 0.0f, 0.0f);
                 m_observerY.reset(last_y_meas_mm, 0.0f, 0.0f);
-
+                
                 /*
                  * Regler zurücksetzen, damit kein alter Integratorwert übernommen wird.
                  */
@@ -413,8 +416,8 @@ void SPIComCntrl::executeTask()
              */
             m_ikInput.pitch = DegreeToRad(control_output_x_grad);
             m_ikInput.roll  = -DegreeToRad(control_output_y_grad);
-            m_ikInput.h     = 110.5f;
-            // m_ikInput.h     = traj.h_mm; // Aktivieren für Bounce
+            // m_ikInput.h     = 110.5f;
+            m_ikInput.h     = traj.h_mm; // Aktivieren für Bounce
 
             InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 
@@ -498,20 +501,20 @@ void SPIComCntrl::executeTask()
         m_SerialStream.write(m_observerX.getDisturbanceRad());  //  9 disturbance_x [rad]
         m_SerialStream.write(m_observerY.getDisturbanceRad());  // 10 disturbance_y [rad]
 
-        m_SerialStream.write(log_error_x);                      // 11 error_x [mm]
-        m_SerialStream.write(log_error_y);                      // 12 error_y [mm]
+        // m_SerialStream.write(log_error_x);                      // 11 error_x [mm]
+        // m_SerialStream.write(log_error_y);                      // 12 error_y [mm]
 
-        m_SerialStream.write(log_control_output_x_grad);        // 13 controller output x [deg]
-        m_SerialStream.write(log_control_output_y_grad);        // 14 controller output y [deg]
+        m_SerialStream.write(log_control_output_x_grad);        // 11 controller output x [deg]
+        m_SerialStream.write(log_control_output_y_grad);        // 12 controller output y [deg]
 
-        m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
-        m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
-        m_SerialStream.write(ballWasLost ? 1.0f : 0.0f);        // 17 ball lost flag
-        m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
-        m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
+        // m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
+        // m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
+        // m_SerialStream.write(ballWasLost ? 1.0f : 0.0f);        // 17 ball lost flag
+        // m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
+        // m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
 
-        m_SerialStream.write(m_ImuData.rpy.x()); // 20 roll IMU [rad]
-        m_SerialStream.write(m_ImuData.rpy.y()); // 21 pitch IMU [rad]
+        m_SerialStream.write(m_ImuData.rpy.x()); // 13 roll IMU [rad]
+        m_SerialStream.write(m_ImuData.rpy.y()); // 14 pitch IMU [rad]
 
         m_SerialStream.send();
     }
