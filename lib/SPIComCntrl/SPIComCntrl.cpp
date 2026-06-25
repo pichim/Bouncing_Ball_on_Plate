@@ -4,14 +4,14 @@
 // Servo & Inverse Kinematics mapping constants
 namespace
 {
-    constexpr float IK_HOME_DEG = 90.0f;    // aus IK: roll=0, pitch=0, h=110.5
+    constexpr float IK_HOME_DEG = 91.81f;    // aus IK: roll=0, pitch=0, h=110.5
     constexpr float SERVO_MAX_DEG = 115.4f; // real nutzbarer Servobereich
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
-    constexpr float SERVO1_HOME_DEG = 55.0f + 1.9f;
-    constexpr float SERVO2_HOME_DEG = 55.0f + 2.8f;
-    constexpr float SERVO3_HOME_DEG = 55.0f - 1.6f;
+    constexpr float SERVO1_HOME_DEG = 55.0f + 1.3f;
+    constexpr float SERVO2_HOME_DEG = 55.0f + 3.1f;
+    constexpr float SERVO3_HOME_DEG = 55.0f - 1.3f;
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
     constexpr float SERVO_CLAMP_DELTA_DEG = 20.0f;
@@ -29,7 +29,7 @@ namespace
     constexpr float CAMERA_TS_S = 0.020f;
 
     // Kamera-Z-Grenze für gültige Ballmessung
-    constexpr float CAMERA_Z_LIMIT_MM = 20.0f;
+    constexpr float CAMERA_Z_LIMIT_MM = 350.0f;
 
     float filtered_setpoint_x = 0.0f;
     float filtered_setpoint_y = 0.0f;
@@ -93,7 +93,7 @@ SPIComCntrl::SPIComCntrl()
 
     // Trajectory setHold
     m_trajectory.setHold(0.0f, 0.0f);
-    m_trajectory.setHeightSine(110.5f, 20.0f, 3.5f); // Sinus für Bounce
+    m_trajectory.setHeightSine(110.5f, 20.0f, 3.0f); // Sinus für Bounce
     
     // // Trajectory setCircle
     // m_trajectory.setCircle(50.0f, 0.35f);
@@ -486,26 +486,26 @@ void SPIComCntrl::executeTask()
 
         m_SerialStream.write(dtime_us);                         //  0 Delta time [us] -> data.time
 
-        m_SerialStream.write(xd);                               //  1 x_des [mm]
-        m_SerialStream.write(yd);                               //  2 y_des [mm]
+        // m_SerialStream.write(xd);                               //  1 x_des [mm]
+        // m_SerialStream.write(yd);                               //  2 y_des [mm]
 
-        m_SerialStream.write(last_x_meas_mm);                   //  3 x_meas camera [mm]
-        m_SerialStream.write(last_y_meas_mm);                   //  4 y_meas camera [mm]
+        // m_SerialStream.write(last_x_meas_mm);                   //  3 x_meas camera [mm]
+        // m_SerialStream.write(last_y_meas_mm);                   //  4 y_meas camera [mm]
 
-        m_SerialStream.write(m_observerX.getPositionMm());      //  5 x_hat observer [mm]
-        m_SerialStream.write(m_observerY.getPositionMm());      //  6 y_hat observer [mm]
+        // m_SerialStream.write(m_observerX.getPositionMm());      //  5 x_hat observer [mm]
+        // m_SerialStream.write(m_observerY.getPositionMm());      //  6 y_hat observer [mm]
 
-        m_SerialStream.write(m_observerX.getVelocityMmS());     //  7 vx_hat observer [mm/s]
-        m_SerialStream.write(m_observerY.getVelocityMmS());     //  8 vy_hat observer [mm/s]
+        // m_SerialStream.write(m_observerX.getVelocityMmS());     //  7 vx_hat observer [mm/s]
+        // m_SerialStream.write(m_observerY.getVelocityMmS());     //  8 vy_hat observer [mm/s]
 
-        m_SerialStream.write(m_observerX.getDisturbanceRad());  //  9 disturbance_x [rad]
-        m_SerialStream.write(m_observerY.getDisturbanceRad());  // 10 disturbance_y [rad]
+        // m_SerialStream.write(m_observerX.getDisturbanceRad());  //  9 disturbance_x [rad]
+        // m_SerialStream.write(m_observerY.getDisturbanceRad());  // 10 disturbance_y [rad]
 
         // m_SerialStream.write(log_error_x);                      // 11 error_x [mm]
         // m_SerialStream.write(log_error_y);                      // 12 error_y [mm]
 
-        m_SerialStream.write(log_control_output_x_grad);        // 11 controller output x [deg]
-        m_SerialStream.write(log_control_output_y_grad);        // 12 controller output y [deg]
+        // m_SerialStream.write(log_control_output_x_grad);        // 11 controller output x [deg]
+        // m_SerialStream.write(log_control_output_y_grad);        // 12 controller output y [deg]
 
         // m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
         // m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
@@ -513,8 +513,8 @@ void SPIComCntrl::executeTask()
         // m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
         // m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
 
-        m_SerialStream.write(m_ImuData.rpy.x()); // 13 roll IMU [rad]
-        m_SerialStream.write(m_ImuData.rpy.y()); // 14 pitch IMU [rad]
+        // m_SerialStream.write(m_ImuData.rpy.x()); // 13 roll IMU [rad]
+        // m_SerialStream.write(m_ImuData.rpy.y()); // 14 pitch IMU [rad]
 
         m_SerialStream.send();
     }
