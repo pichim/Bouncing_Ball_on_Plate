@@ -9,8 +9,8 @@ namespace
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
-    constexpr float SERVO1_HOME_DEG = 55.0f + 1.3f;
-    constexpr float SERVO2_HOME_DEG = 55.0f + 3.1f;
+    constexpr float SERVO1_HOME_DEG = 55.0f + 1.6f;
+    constexpr float SERVO2_HOME_DEG = 55.0f + 3.8f;
     constexpr float SERVO3_HOME_DEG = 55.0f - 1.3f;
 
     // gewünschte Begrenzung relativ zur Home-Lage (+/- 20°)
@@ -388,12 +388,12 @@ void SPIComCntrl::executeTask()
             control_loop_counter = 0;
 
             // // Camera-only Positionsfehler
-            // const float error_x = xd - last_x_meas_mm;
-            // const float error_y = yd - last_y_meas_mm;
+            const float error_x = xd - last_x_meas_mm;
+            const float error_y = yd - last_y_meas_mm;
             
-            // Statischer Kalman Positionsfehler
-            const float error_x = xd - m_observerX.getPositionMm();
-            const float error_y = yd - m_observerY.getPositionMm();
+            // // Statischer Kalman Positionsfehler
+            // const float error_x = xd - m_observerX.getPositionMm();
+            // const float error_y = yd - m_observerY.getPositionMm();
 
             // PID-T1 Positionsregler
             float control_output_x_grad = m_ballPosCntrl_x.update(error_x);

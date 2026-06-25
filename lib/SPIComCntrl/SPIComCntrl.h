@@ -47,7 +47,7 @@ private:
     // static constexpr float VISION_TIMEOUT = 1.0F; // seconds
 
     // 333 hz mit Kalman
-    static constexpr float BALL_CTRL_KP = 0.05f;
+    static constexpr float BALL_CTRL_KP = 0.0365f;
     static constexpr float BALL_CTRL_KI = 0.0f;
     static constexpr float BALL_CTRL_TAU_V = 1.0f;
     static constexpr float BALL_CTRL_TAU_f = 0.1f;
