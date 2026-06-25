@@ -29,7 +29,7 @@ namespace
     constexpr float CAMERA_TS_S = 0.020f;
 
     // Kamera-Z-Grenze für gültige Ballmessung
-    constexpr float CAMERA_Z_LIMIT_MM = 350.0f;
+    constexpr float CAMERA_Z_LIMIT_MM = 200.0f;
 
     float filtered_setpoint_x = 0.0f;
     float filtered_setpoint_y = 0.0f;
@@ -91,29 +91,8 @@ SPIComCntrl::SPIComCntrl()
     m_ballPosCntrl_x.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
     m_ballPosCntrl_y.setIntegratorLimits(-ANGLE_DELTA_LIMIT_GRAD * 0.2f, ANGLE_DELTA_LIMIT_GRAD * 0.2f);
 
-    // Trajectory setHold
+    // Initialer State: Hold (Home)
     m_trajectory.setHold(0.0f, 0.0f);
-    m_trajectory.setHeightSine(110.5f, 20.0f, 3.0f); // Sinus für Bounce
-    
-    // // Trajectory setCircle
-    // m_trajectory.setCircle(50.0f, 0.35f);
-
-    // // Trajectory setFigureEight
-    // m_trajectory.setFigureEight(50.0f, 25.0f, 0.35f);
-
-    // // Trajectory setSequence
-    // static const SequencePoint seq[] = {
-    //     {  0.0f,   0.0f, 18.0f },
-    //     { 35.0f, -20.0f, 6.0f },
-    //     {-45.0f,  30.0f, 6.0f },
-    //     { 20.0f,  45.0f, 6.0f },
-    //     {-30.0f, -35.0f, 6.0f },
-    //     { 50.0f,  10.0f, 6.0f },
-    //     {-10.0f,  50.0f, 6.0f },
-    //     { 25.0f, -50.0f, 6.0f },
-    // };
-
-    // m_trajectory.setSequence(seq, 8);
 
     // Servo Kalibrierung
     m_servoD0.calibratePulseMinMax(SERVO1_PULSE_MIN, SERVO1_PULSE_MAX);
@@ -149,7 +128,7 @@ void SPIComCntrl::executeTask()
     
     // Button callback nur einmal registrieren
     if (!m_buttonCallbackAttached) {
-        user_button.rise(callback(this, &SPIComCntrl::toggleExecuteMainFcn));
+        user_button.rise(callback(this, &SPIComCntrl::nextState));
         m_buttonCallbackAttached = true;
     }
     
@@ -170,12 +149,6 @@ void SPIComCntrl::executeTask()
 
     const float xd = filtered_setpoint_x;
     const float yd = filtered_setpoint_y;
-    // const float xd = traj.x_mm;
-    // const float yd = traj.y_mm;
-
-
-    // // IMU für Kalibrierstatus, Observer und Logging/Reply lesen
-    // m_ImuData = m_Imu.getImuData();
 
     bool newDataAvailable = false;
     bool validCameraUpdate = false;
@@ -273,12 +246,6 @@ void SPIComCntrl::executeTask()
 
     /*
      * Observer läuft mit 1 kHz.
-     * Die Kamera liefert nur ca. 50 Hz.
-     * Zwischen zwei Kamera-Frames wird last_x_meas_mm / last_y_meas_mm gehalten.
-     *
-     * Wichtig:
-     * Der Regler verwendet unten aktuell noch last_x_meas_mm / last_y_meas_mm.
-     * Der Observer läuft hier nur im Hintergrund mit.
      */
     if (m_Imu.isCalibrated() && m_observerHasFirstMeasurement && !ballWasLost) {
 
@@ -286,16 +253,12 @@ void SPIComCntrl::executeTask()
         const float pitch_rad = m_ImuData.rpy.y();
 
         /*
-         * x-Richtung:
-         * u = pitch [rad]
-         * y = letzte Kamera-x-Position [mm]
+         * x-Richtung: u = pitch [rad], y = letzte Kamera-x-Position [mm]
          */
         m_observerX.do_step(pitch_rad, last_x_meas_mm);
 
         /*
-         * y-Richtung:
-         * u = roll [rad]
-         * y = letzte Kamera-y-Position [mm]
+         * y-Richtung: u = roll [rad], y = letzte Kamera-y-Position [mm]
          */
         m_observerY.do_step(roll_rad, last_y_meas_mm);
     }
@@ -317,9 +280,9 @@ void SPIComCntrl::executeTask()
         m_servo_commands[1] = servo2_home_pwm;
         m_servo_commands[2] = servo3_home_pwm;
 
-    } else if (!m_executeMain) {
+    } else if (m_state == State::HOME) {
 
-        // Regler ausgeschaltet: Home halten
+        // Regler ausgeschaltet (State 0): Home halten
         m_servo_commands[0] = servo1_home_pwm;
         m_servo_commands[1] = servo2_home_pwm;
         m_servo_commands[2] = servo3_home_pwm;
@@ -333,7 +296,7 @@ void SPIComCntrl::executeTask()
 
     } else if (ballWasLost || !m_observerHasFirstMeasurement) {
 
-        // Ball weg: Servos deaktivieren
+        // Ball weg: Servos auf Home
         m_servo_commands[0] = servo1_home_pwm;
         m_servo_commands[1] = servo2_home_pwm;
         m_servo_commands[2] = servo3_home_pwm;
@@ -378,8 +341,6 @@ void SPIComCntrl::executeTask()
 
         /*
          * Regler nur jedes 3. executeTask() rechnen.
-         * executeTask: 1000 Hz
-         * Regler: ca. 333 Hz
          */
         control_loop_counter++;
 
@@ -387,13 +348,9 @@ void SPIComCntrl::executeTask()
 
             control_loop_counter = 0;
 
-            // // Camera-only Positionsfehler
+            // Camera-only Positionsfehler
             const float error_x = xd - last_x_meas_mm;
             const float error_y = yd - last_y_meas_mm;
-            
-            // // Statischer Kalman Positionsfehler
-            // const float error_x = xd - m_observerX.getPositionMm();
-            // const float error_y = yd - m_observerY.getPositionMm();
 
             // PID-T1 Positionsregler
             float control_output_x_grad = m_ballPosCntrl_x.update(error_x);
@@ -416,8 +373,13 @@ void SPIComCntrl::executeTask()
              */
             m_ikInput.pitch = DegreeToRad(control_output_x_grad);
             m_ikInput.roll  = -DegreeToRad(control_output_y_grad);
-            // m_ikInput.h     = 110.5f;
-            m_ikInput.h     = traj.h_mm; // Aktivieren für Bounce
+
+            // Höhe festlegen: Nur bei State 3 bouncen, sonst feste Home-Höhe
+            if (m_state == State::BOUNCE_CIRCLE) {
+                m_ikInput.h = traj.h_mm;
+            } else {
+                m_ikInput.h = 110.5f;
+            }
 
             InverseKinematics3Leg::Result ikResult = m_ik.compute(m_ikInput);
 
@@ -457,8 +419,6 @@ void SPIComCntrl::executeTask()
 
     /*
      * Servo-Pulse setzen.
-     * Wenn Servo disabled ist, sollte setPulseWidth je nach Servo-Klasse keinen Effekt haben.
-     * Wenn er enabled ist, wird das letzte gültige Kommando gehalten.
      */
     m_servoD0.setPulseWidth(m_servo_commands[0]);
     m_servoD1.setPulseWidth(m_servo_commands[1]);
@@ -510,7 +470,10 @@ void SPIComCntrl::executeTask()
         // m_SerialStream.write(newDataAvailable ? 1.0f : 0.0f);   // 15 new SPI data flag
         // m_SerialStream.write(validCameraUpdate ? 1.0f : 0.0f);  // 16 valid camera update flag
         // m_SerialStream.write(ballWasLost ? 1.0f : 0.0f);        // 17 ball lost flag
-        // m_SerialStream.write(m_executeMain ? 1.0f : 0.0f);      // 18 execute main flag
+        
+        // Logging m_state (Falls du es aktivieren möchtest, statt m_executeMain)
+        // m_SerialStream.write(static_cast<float>(m_state));      // 18 execute main / state flag
+        
         // m_SerialStream.write(m_observerHasFirstMeasurement ? 1.0f : 0.0f); // 19 observer valid flag
 
         // m_SerialStream.write(m_ImuData.rpy.x()); // 13 roll IMU [rad]
@@ -521,9 +484,46 @@ void SPIComCntrl::executeTask()
 
 }
 
-void SPIComCntrl::toggleExecuteMainFcn()
+void SPIComCntrl::nextState()
 {
-    m_executeMain = !m_executeMain;
+    // Zum nächsten State schalten (0 -> 1 -> 2 -> 3 -> 0)
+    int next = static_cast<int>(m_state) + 1;
+    if (next > 3) {
+        next = 0;
+    }
+    m_state = static_cast<State>(next);
+
+    // Trajektorie passend zum neuen State einstellen
+    switch (m_state) {
+        case State::HOME: // State 0
+            m_trajectory.setHold(0.0f, 0.0f);
+            break;
+
+        case State::SEQUENCE: // State 1: Setpoints im 5s Intervall
+        {
+            static const SequencePoint seq[] = {
+                {  0.0f,   0.0f, 5.0f },
+                { 35.0f, -20.0f, 5.0f },
+                {-45.0f,  30.0f, 5.0f },
+                { 20.0f,  45.0f, 5.0f },
+                {-30.0f, -35.0f, 5.0f },
+                { 50.0f,  10.0f, 5.0f },
+                {-10.0f,  50.0f, 5.0f },
+                { 25.0f, -50.0f, 5.0f }
+            };
+            m_trajectory.setSequence(seq, 8);
+            break;
+        }
+
+        case State::CIRCLE: // State 2: Kreis (ohne Bounce)
+            m_trajectory.setCircle(50.0f, 0.35f);
+            break;
+
+        case State::BOUNCE_CIRCLE: // State 3: Kreis mit Bounce
+            m_trajectory.setCircle(50.0f, 0.35f);
+            m_trajectory.setHeightSine(110.5f, 20.0f, 3.0f); // 3 Hz Bounce
+            break;
+    }
 }
 
 float SPIComCntrl::clamp(float val, float min, float max)

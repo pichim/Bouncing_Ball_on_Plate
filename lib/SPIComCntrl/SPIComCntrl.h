@@ -93,10 +93,21 @@ private:
 
     // Userbutton
     DebounceIn user_button;
-    bool m_executeMain{false};
+    
+    // State Machine für Trajektorien
+    enum class State {
+        HOME = 0,
+        SEQUENCE = 1,
+        CIRCLE = 2,
+        BOUNCE_CIRCLE = 3
+    };
+    State m_state{State::HOME};
     bool m_buttonCallbackAttached{false};
 
-    void toggleExecuteMainFcn();
+    int m_bounceKickCounter{0};
+
+    // Funktion zum Weiterschalten des States
+    void nextState();
 
     void executeTask() override;
 
