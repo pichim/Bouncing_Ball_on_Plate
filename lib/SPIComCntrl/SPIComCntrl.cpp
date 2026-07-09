@@ -5,7 +5,7 @@
 namespace
 {
     constexpr float IK_HOME_DEG = 91.81f;    // aus IK: roll=0, pitch=0, h=110.5
-    constexpr float SERVO_MAX_DEG = 115.4f; // real nutzbarer Servobereich
+    constexpr float SERVO_MAX_DEG = 115.4f;  // real nutzbarer Servobereich
     constexpr float SERVO_MIN_DEG = 0.0f;
 
     // Reale HOME-Winkel der 3 Servos bei waagerechter Platte
@@ -18,7 +18,7 @@ namespace
 
     /*
      * executeTask läuft mit 1000 Hz.
-     * Der Regler soll mit ca. 333 Hz laufen.
+     * Der Regler läuft mit ca. 333 Hz laufen.
      * Deshalb wird der Regler nur jedes 3. Mal gerechnet.
      */
     constexpr int CONTROL_LOOP_DIVIDER = 3;
@@ -28,7 +28,7 @@ namespace
     // Kamera läuft mit ca. 50 Hz
     constexpr float CAMERA_TS_S = 0.020f;
 
-    // Kamera-Z-Grenze für gültige Ballmessung
+    // Kamera-Z-Grenze für gültige Ballmessung überhalb der Platte
     constexpr float CAMERA_Z_LIMIT_MM = 200.0f;
 
     float filtered_setpoint_x = 0.0f;
@@ -44,12 +44,6 @@ namespace
     // Letzter gültiger Kamerawert
     float last_x_meas_mm = 0.0f;
     float last_y_meas_mm = 0.0f;
-
-    // Logging-Werte
-    float log_error_x = 0.0f;
-    float log_error_y = 0.0f;
-    float log_control_output_x_grad = 0.0f;
-    float log_control_output_y_grad = 0.0f;
 }
 
 SPIComCntrl::SPIComCntrl()
@@ -194,11 +188,6 @@ void SPIComCntrl::executeTask()
 
                 control_loop_counter = 0;
 
-                log_error_x = 0.0f;
-                log_error_y = 0.0f;
-                log_control_output_x_grad = 0.0f;
-                log_control_output_y_grad = 0.0f;
-
                 m_observerHasFirstMeasurement = true;
             }
 
@@ -289,11 +278,6 @@ void SPIComCntrl::executeTask()
 
         control_loop_counter = 0;
 
-        log_error_x = 0.0f;
-        log_error_y = 0.0f;
-        log_control_output_x_grad = 0.0f;
-        log_control_output_y_grad = 0.0f;
-
     } else if (ballWasLost || !m_observerHasFirstMeasurement) {
 
         // Ball weg: Servos auf Home
@@ -317,11 +301,6 @@ void SPIComCntrl::executeTask()
         m_ballPosCntrl_y.reset(0.0f);
 
         control_loop_counter = 0;
-
-        log_error_x = 0.0f;
-        log_error_y = 0.0f;
-        log_control_output_x_grad = 0.0f;
-        log_control_output_y_grad = 0.0f;
 
     } else {
 
@@ -359,12 +338,6 @@ void SPIComCntrl::executeTask()
             // Sicherheitsbegrenzung
             control_output_x_grad = clamp(control_output_x_grad, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
             control_output_y_grad = clamp(control_output_y_grad, -ANGLE_DELTA_LIMIT_GRAD, ANGLE_DELTA_LIMIT_GRAD);
-
-            // Für Logging speichern
-            log_error_x = error_x;
-            log_error_y = error_y;
-            log_control_output_x_grad = control_output_x_grad;
-            log_control_output_y_grad = control_output_y_grad;
 
             /*
              * Inputs für inverse Kinematik
