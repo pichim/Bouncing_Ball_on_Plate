@@ -4,6 +4,8 @@ Firmware for the Nucleo F446RE running a 1 kHz control loop with SPI-DMA slave I
 
 ## How to Use the System
 
+Run: ` ./vision.sh`
+
 When the system is powered on, it requires approximately **5 seconds** to complete its initialization and calibration. During this time, **do not move the system or the plate**, as the IMU (Inertial Measurement Unit) is calibrating itself by measuring the plate's orientation. Once the calibration is complete, the system is ready for operation.
 
 The operating modes are controlled using a single button. Each button press switches to the next mode:
@@ -51,8 +53,8 @@ For the best tracking performance, always use an **orange table tennis (ping pon
  
 ## Data link (SPI)
  
-- Payload: 30 floats. First 3 = servo setpoints in [0,1].
-- Reply fields populated: setpoints, gyro (rad/s), acc (m/s²), RPY (rad) in first 13 floats; remainder zero.
+- Payload: 30 floats. First 3 = x, y, z.
+- Reply fields populated: x, y, z (mm) (echo), gyro (rad/s), acc (m/s²) in first 9 floats; remainder zero.
 - Protocol: Master sends 0x56 (arm) then 0x55 (publish). CRC-8 (poly 0x07) over header+payload.
  
 ## Logging (UART)
@@ -77,4 +79,15 @@ For the best tracking performance, always use an **orange table tennis (ping pon
  
 ## Run on the Raspberry Pi
  
-Run: `sudo chrt -f 50 python python/main.py`
+Run: 
+` ./vision.sh`
+
+or:
+`source venv/bin/activate`
+`sudo chrt -f 50 python python/main.py`
+
+if used on a new system, the following libraries are needed:
+opencv
+numpy
+spidev
+picamera2
