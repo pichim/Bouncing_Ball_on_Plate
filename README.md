@@ -154,8 +154,10 @@ deactivate
 
 ## Dependencies
 
-- `picamera2`
-- `spidev`
-- `opencv-python`
-- `numpy`
-- `Flask`
+The system was developed and tested with the following package versions:
+
+- `picamera2` (tested with `0.3.31`)
+- `spidev` (tested with `3.5`)
+- `opencv-python` (tested with `4.13.0.92`)
+- `numpy` (tested with `1.24.4`)
+- `Flask` (tested with `2.2.2`)
