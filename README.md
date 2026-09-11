@@ -2,6 +2,8 @@
 
 Firmware for the Nucleo F446RE running a 1 kHz control loop with SPI-DMA slave I/O to a Raspberry Pi 5, MPU6500 IMU, three servos, and an optional high-speed UART logging stream.
 
+Includes Python scripts for the vision pipeline.
+
 ## How to Use the System
 
 ### Wiring
