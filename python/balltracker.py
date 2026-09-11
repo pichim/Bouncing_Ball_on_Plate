@@ -4,6 +4,7 @@ import numpy as np
 import time
 from picamera2 import Picamera2
 import cv2
+import math
 ENABLE_WEB_STREAM = True  # <<< SET TO False TO DISABLE WEBSITE
 if ENABLE_WEB_STREAM:
     from flask import Flask, Response
@@ -16,13 +17,14 @@ class CameraProcessor:
         if ENABLE_WEB_STREAM:
             self.web_frame = None
             self.web_lock = threading.Lock()
+            self.new_frame_event = threading.Event()
 
         # --- Camera ---
         self.picam2 = Picamera2()
         self.picam2.post_callback = self._callback
             
 
-        # --- Frame buffer (latest only) ---
+        # --- Frame buffer ---
         self.frame_q = queue.Queue(maxsize=1)
 
         # --- Shared state for main ---
@@ -34,36 +36,7 @@ class CameraProcessor:
         self.running = False
         self.worker = threading.Thread(target=self._worker_loop, daemon=True)
 
-        # camera distortion
-        # only used if K was made with other frame sizes   
-        # def scale_intrinsics(K, old_size, new_size):
-        #     old_w, old_h = old_size
-        #     new_w, new_h = new_size
-        #     sx = new_w / old_w
-        #     sy = new_h / old_h
-        #     K_scaled = K.copy()
-        #     K_scaled[0, 0] *= sx  # fx
-        #     K_scaled[1, 1] *= sy  # fy
-        #     K_scaled[0, 2] *= sx  # cx
-        #     K_scaled[1, 2] *= sy  # cy
-        #     return K_scaled
-
-        # # --- Fisheye calibration (your working values) ---
-        # K_old = np.array([
-        #     [410.17747674, 0.0, 299.96826545],
-        #     [0.0, 409.32732313, 219.99535070],
-        #     [0.0, 0.0, 1.0]
-        # ], dtype=np.float64)
-
-        # D = np.array([
-        #     [0.01534284],
-        #     [-0.01886187],
-        #     [0.01338572],
-        #     [0.02682248]
-        # ], dtype=np.float64)
-
-        # K = scale_intrinsics(K_old, (640, 480), (1456, 1088))
-
+        # --- Camera calibration parameters ---
         self.K = np.array([
         [914.91763, 0.0, 663.41604981],
         [0.0, 917.4751116, 526.47839392],
@@ -117,11 +90,6 @@ class CameraProcessor:
     # Worker thread (ball detection)
     # =========================================================
     def _worker_loop(self):
-        
-        # --- SCHALTER ZUM TESTEN ---
-        # True  = Ganzes Bild entzerren (Hohe Präzision, langsam)
-        # False = Nur den Punkt entzerren (Schnell, am Rand ungenau für Z)
-        FULL_FRAME_UNDISTORT = True
 
         while self.running:
             try:
@@ -129,61 +97,129 @@ class CameraProcessor:
             except queue.Empty:
                 continue
 
-            # Startzeit für die Performancemessung
-            start_time = time.time()
+            try:
+                # Startzeit für die Performancemessung
+                start_time = time.time()
 
-            if FULL_FRAME_UNDISTORT:
-                # --- METHODE 1: Vollbild-Entzerrung ---
-                # Das ganze Bild geradeziehen, bevor der Ball gesucht wird
-                frame_process = cv2.remap(frame, self.map1, self.map2, 
-                                          interpolation=cv2.INTER_LINEAR, 
-                                          borderMode=cv2.BORDER_CONSTANT)
+                # --- METHODE: Zwei-Punkte-Entzerrung ---
                 
-                # Ball im bereits perfekten Bild suchen
-                x_px, y_px, r = self.detect_ball(frame_process)
-                f_avg = (self.new_K[0, 0] + self.new_K[1, 1]) / 2.0
-                
-            else:
-                # --- METHODE 2: Punkt-Entzerrung (wie bisher) ---
                 frame_process = frame
-                x_distorted, y_distorted, r = self.detect_ball(frame_process)
+                x_distorted, y_distorted, r_dist = self.detect_ball(frame_process)
+                # processing_time_ms = (time.time() - start_time) * 1000
                 
-                if r > 5:
-                    pt = np.array([[[x_distorted, y_distorted]]], dtype=np.float64)
-                    undistorted_pt = cv2.fisheye.undistortPoints(
-                        pt, self.K, self.D, P=self.new_K
+                if r_dist > 5:
+
+                    # 1. Optisches Zentrum des verzerrten Bildes
+                    cx_dist = self.K[0, 2]
+                    cy_dist = self.K[1, 2]
+
+                    # 2. Vektor vom Bildzentrum zum Ball
+                    dx = x_distorted - cx_dist
+                    dy = y_distorted - cy_dist
+                    dist_center = math.hypot(dx, dy)
+
+                    if dist_center < 1.0:
+                        # Ball ist exakt in der Mitte, Richtung ist egal
+                        x_edge_dist = x_distorted + r_dist
+                        y_edge_dist = y_distorted
+                    else:
+                        # 3. Tangentialvektor berechnen (90 Grad gedreht zum Radiusvektor)
+                        # Normieren auf Länge 1
+                        tan_x = -dy / dist_center
+                        tan_y = dx / dist_center
+                        
+                        # 4. Randpunkt berechnen asu Ballmittelpunkt + (Tangentialvektor (normiert) * Radius)
+                        x_edge_dist = x_distorted + (tan_x * r_dist)
+                        y_edge_dist = y_distorted + (tan_y * r_dist)
+
+                    # 5. Punkte für die Entzerrung übergeben
+                    pts_distorted = np.array([[[x_distorted, y_distorted], 
+                                            [x_edge_dist, y_edge_dist]]], dtype=np.float64)
+
+                    
+                    # Beide Punkte gleichzeitig entzerren!
+                    pts_undistorted = cv2.fisheye.undistortPoints(
+                        pts_distorted, self.K, self.D, P=self.new_K
                     )
-                    x_px = undistorted_pt[0][0][0]
-                    y_px = undistorted_pt[0][0][1]
-                    f_avg = (self.K[0, 0] + self.K[1, 1]) / 2.0
+                    
+                    # Entzerrter Mittelpunkt
+                    x_px = pts_undistorted[0][0][0]
+                    y_px = pts_undistorted[0][0][1]
+                    # print(f"undistorted center: ({x_px:.1f}, {y_px:.1f})")
+                    
+                    # Entzerrter Randpunkt
+                    x_edge = pts_undistorted[0][1][0]
+                    y_edge = pts_undistorted[0][1][1]
+
+                    # Parameter der Kameramatrix    m_trajectory.setCircle(50.0f, 0.5f);
+                    fx = self.new_K[0, 0]
+                    fy = self.new_K[1, 1]
+                    cx = self.new_K[0, 2]
+                    cy = self.new_K[1, 2]
+
+                    R_real = 20.0  # mm
+
+                    # 1. 3D-Richtungsvektoren (Z = 1.0 Ebene)
+                    # Vektor zum Zentrum des Balls
+                    v_center = np.array([(x_px - cx) / fx, (y_px - cy) / fy, 1.0])
+                    # Vektor zur Außenkante des Balls
+                    v_edge = np.array([(x_edge - cx) / fx, (y_edge - cy) / fy, 1.0])
+
+                    # 2. Vektoren normieren
+                    norm_center = np.linalg.norm(v_center)
+                    norm_edge = np.linalg.norm(v_edge)
+                    v_center_norm = v_center / norm_center
+                    v_edge_norm = v_edge / norm_edge
+
+                    # 3. 3D-Winkel zwischen center und rand-vektor berechnen
+                    cos_alpha = np.clip(np.dot(v_center_norm, v_edge_norm), -1.0, 1.0)
+                    alpha = math.acos(cos_alpha)
+
+                    if alpha > 0:
+                        # 4. Die direkte Luftlinie (D) berechnen
+                        # Geometrie der Kugel: sin(Sichtwinkel) = Radius / Distanz
+                        D = R_real / math.sin(alpha)
+
+                        # 5. X, Y, Z berechnen
+                        # v_center_norm zeigt in die Richtung des Balls, D gibt an, wie weit weg er ist.
+                        X = D * v_center_norm[0]
+                        Y = D * v_center_norm[1]
+                        Z = D * v_center_norm[2]
+
+                        # 6. Master-Offset: Optisches Zentrum direkt zum mechanischen Zentrum
+                        # Plattenmitte (681, 505) - Abstand zum optischen Nullpunkt der Kamera-Matrix.
+                            
+                        Zref = 185.7  # mm, Referenzhöhe für die Offset-Kompensation (z.B. Höhe der Platte)
+                        X -= (669 - self.new_K[0, 2]) * Zref / fx
+                        Y -= (509 - self.new_K[1, 2]) * Zref / fy
+
+                        # --- Start der Z-Kompensation (Entzerrung) ---
+                        # 1-3 auskommentierung if entzerrung nicht gewunscht
+                        # 1. Koeffizienten aus dem MATLAB-Fit
+                        c0 = 185.7
+                        c1 = -0.0025
+                        c2 = 0.0137
+
+                        # 2. Berechne die erwartete Wölbung (das Modell) an der aktuellen X, Y Position
+                        # Achtung: Python nutzt ** für Potenzen
+                        z_modell = c0 + c1 * X + c2 * Y
 
 
-            # --- BERECHNUNG (für beide Methoden gleich) ---
-            if r > 5:  # valid detection
-                # Parameter aus der NEUEN Kameramatrix auslesen
-                fx = self.new_K[0, 0]
-                fy = self.new_K[1, 1]
-                cx = self.new_K[0, 2]
-                cy = self.new_K[1, 2]
+                        # 3. Z korrigieren: Gemessener Wert minus die "Beule" plus Referenzhöhe (c0)
+                        Z = Z - (z_modell)
 
-                R_real = 20.0  # mm
+                        processing_time_ms = (time.time() - start_time) * 1000
+                        
+                        with self.lock:
+                            self.ball_pos = (X, Y, Z, processing_time_ms)
+                            self.new_data = True
+                        
                 
+        
+            except Exception as e:
+                print(f"error in WORKER-THREAD: {e}")
+                time.sleep(0.1) # Kurze Pause, um Log-Spam zu verhindern
 
-                # 3D-Position berechnen
-                Z = (R_real * f_avg) / r
-                X = (x_px - cx) * Z / fx
-                Y = (y_px - cy) * Z / fy
-
-                # Zeitmessung abschließen
-                processing_time_ms = (time.time() - start_time) * 1000
-
-                print(f"Modus: {'Vollbild' if FULL_FRAME_UNDISTORT else 'Punkt'} | "
-                      f"Zeit: {processing_time_ms:.1f} ms | "
-                      f"Radius: {r:.2f} px | Distanz Z: {Z:.1f} mm")
-
-                with self.lock:
-                    self.ball_pos = (X, Y, Z, processing_time_ms)
-                    self.new_data = True
 
     # =========================================================
     # Ball detection
@@ -193,41 +229,64 @@ class CameraProcessor:
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # range for pingpong ball
-        # lower_orange = np.array([5, 150, 150])
-        # upper_orange = np.array([25, 255, 255])
-
+        # TE 616 (neutral)
         lower_orange = np.array([10, 150, 100])
         upper_orange = np.array([20, 255, 255])
 
-        # range for red massive ball
-        #lower_orange = np.array([170, 120, 60])
-        #upper_orange = np.array([179, 255, 255])
+        # TS 0.12 (hell)
+        # lower_orange = np.array([2, 150, 50])
+        # upper_orange = np.array([12, 255, 200])
+
         mask = cv2.inRange(hsv, lower_orange, upper_orange)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if contours:
             largest = max(contours, key=cv2.contourArea)
+
+            # circle detection
             ((x, y), radius) = cv2.minEnclosingCircle(largest)
+
+
             if radius > 5:
                 center = (int(x), int(y))
                 cv2.circle(frame, center, int(radius), (0, 255, 0), 2)
                 cv2.circle(frame, center, 2, (0, 0, 255), 3)
+
+            # elipse detection
+            # if len(largest) >= 5:
+            #     ellipse = cv2.fitEllipse(largest)
+            #     # ellipse liefert: Zentrum(x,y), Achsen(breite, höhe), Rotationswinkel
+            #     (x, y), (width, height), angle = ellipse
+                
+            #     # Der "stabile" Radius ist die Hälfte der kürzeren Achse (Minor Axis)
+            #     radius = min(width, height) / 2.0
+                
+            #     if radius > 5:
+            #         center = (int(x), int(y))
+            #         # Zeichnet die exakte Ellipse (sieht in der Präsentation super aus!)
+            #         cv2.ellipse(frame, ellipse, (0, 255, 0), 2) 
+            #         cv2.circle(frame, center, 2, (0, 0, 255), 3) # Mittelpunkt
         
         # Höhe und Breite des Frames abfragen, Zentrum berechnen
         h, w = frame.shape[:2]
         cx, cy = w // 2, h // 2
+        # print(f"Breite: {w}, cx: {cx}")
+        # print(f"Höhe: {h}, cy: {cy}")
 
         new_cx = int(self.new_K[0, 2])
         new_cy = int(self.new_K[1, 2])
 
         # Rotes Kreuz (+) im Bildzentrum einzeichnen
-        cv2.drawMarker(frame, (new_cx, new_cy), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+        # cv2.drawMarker(frame, (new_cx, new_cy), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+        # cv2.drawMarker(frame, (cx, cy), (255, 0, 0), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
+        # cv2.drawMarker(frame, (683, 505), (0, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=20, thickness=2)
 
         # Save frame for website (with drawings already on it)
         if ENABLE_WEB_STREAM:
             with self.web_lock:
                 self.web_frame = frame
+            self.new_frame_event.set()
+            
         
         return x, y, radius
 
@@ -242,9 +301,10 @@ class CameraProcessor:
         config = self.picam2.create_video_configuration(
             main={"size": (1456, 1088)},
             controls={
-                "FrameDurationLimits": (2000, 10000),
-                "AeEnable": True,
-                "ExposureTime": 1000
+                "FrameDurationLimits": (20000, 20000),
+                "AeEnable": False,
+                "ExposureTime": 8000,
+                "AnalogueGain": 1.0
             }
         )
         self.picam2.configure(config)   
@@ -294,27 +354,36 @@ if ENABLE_WEB_STREAM:
         """
 
     def generate():
-        global camera_instance
-        while True:
-            if camera_instance is None:
-                continue
+            global camera_instance
+            while True:
+                if camera_instance is None:
+                    time.sleep(0.1)
+                    continue
 
-            with camera_instance.web_lock:
-                frame = camera_instance.web_frame
+                # wait for new frame
+                if not camera_instance.new_frame_event.wait(timeout=1.0):
+                    continue
+                
+                # reset flag
+                camera_instance.new_frame_event.clear()
 
-            if frame is None:
-                time.sleep(0.1)
-                continue
+                with camera_instance.web_lock:
+                    frame = camera_instance.web_frame
 
-            time.sleep(0.05)
+                if frame is None:
+                    continue
 
-            ret, jpeg = cv2.imencode('.jpg', frame)
-            if not ret:
-                continue
+                ret, jpeg = cv2.imencode('.jpg', frame)
+                if not ret:
+                    continue
 
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' +
-                   jpeg.tobytes() + b'\r\n')
+                try:
+                    yield (b'--frame\r\n'
+                            b'Content-Type: image/jpeg\r\n\r\n' +
+                            jpeg.tobytes() + b'\r\n')
+                except Exception as e:
+                    print(f"Web-Client getrennt oder Fehler: {e}")
+                    break
 
     @app.route('/video_feed')
     def video_feed():

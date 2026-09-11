@@ -4,7 +4,26 @@ Firmware for the Nucleo F446RE running a 1 kHz control loop with SPI-DMA slave I
 
 ## How to Use the System
 
-Run: ` ./vision.sh`
+### Wiring
+1. **Servos:** Connect the laboratory cables to a DC power supply set to **7.4 V**.
+2. **Nucleo:** Connect the Nucleo board to your PC or a power source using the black USB cable.
+3. **Raspberry Pi:** Connect the white official power supply to the Raspberry Pi.
+
+> **Important:** Keep the plate and base completely still for the first **5 seconds** after powering on the Nucleo so the IMU can calibrate its gyro/accel bias correctly.
+
+### Start the Vision System
+
+1. Log in to the Raspberry Pi via SSH or local terminal:
+   - **User:** `pi`
+   - **Password:** `Welcome123`
+2. Run the startup script:
+
+```bash
+~/vision.sh
+```
+
+> **Note:** More details on how to start the vision scripts manually can be found [below](#run-on-the-raspberry-pi).
+
 
 When the system is powered on, it requires approximately **5 seconds** to complete its initialization and calibration. During this time, **do not move the system or the plate**, as the IMU (Inertial Measurement Unit) is calibrating itself by measuring the plate's orientation. Once the calibration is complete, the system is ready for operation.
 
@@ -38,7 +57,7 @@ For the best tracking performance, always use an **orange table tennis (ping pon
 - UART log: PA_9 / PA_10 at 2 Mbps (SerialStream start-byte gated)
 - external user button: PB_1
 - Servo 1: D0/PB2
-- Servo 2: D1/PC6
+- Servo 2: D1/PC8
 - Servo 3: D2/PC6
  
 ## Firmware layout
@@ -78,16 +97,65 @@ For the best tracking performance, always use an **orange table tennis (ping pon
 - If IMU scale factors look zeroed, verify MPU6500 WHO_AM_I and I2C wiring.
  
 ## Run on the Raspberry Pi
- 
-Run: 
-` ./vision.sh`
 
-or:
-`source venv/bin/activate`
-`sudo chrt -f 50 python python/main.py`
+### Option 1: Using the helper script
 
-if used on a new system, the following libraries are needed:
-opencv
-numpy
-spidev
-picamera2
+The helper script is located in the home directory. You can run it either by changing to the home directory:
+
+```bash
+./vision.sh
+```
+
+Or directly from anywhere:
+
+```bash
+~/vision.sh
+```
+
+---
+
+### Option 2: Running manually
+
+Navigate to the project directory:
+
+```bash
+cd ~/GIT_repositories/Bouncing_Ball_on_Plate
+```
+
+Run the application:
+
+```bash
+sudo chrt -f 50 venv/bin/python python/main.py
+```
+
+> **Note:** Calling `venv/bin/python` directly uses the virtual environment automatically without requiring `source venv/bin/activate` beforehand.
+
+---
+
+### Managing the Virtual Environment Manually
+
+Navigate to the project root directory first:
+
+```bash
+cd ~/GIT_repositories/Bouncing_Ball_on_Plate
+```
+
+Activate the virtual environment:
+
+```bash
+source venv/bin/activate
+```
+
+Deactivate the virtual environment:
+
+```bash
+deactivate
+```
+
+## Dependencies
+
+- `picamera2`
+- `spidev`
+- `opencv-python`
+- `numpy`
+- `Flask`

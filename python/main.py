@@ -172,6 +172,7 @@ _spi_ctor: Any = getattr(spidev, "SpiDev")
 spi: _SpiDevProto = cast(_SpiDevProto, _spi_ctor())
 spi.open(0, 0)  # SPI0.0 (MOSI: GPIO 10, MISO: GPIO 9, SCK: GPIO 11, CS: GPIO 8)
 spi.max_speed_hz = 33333333
+# spi.max_speed_hz = 1000000
 spi.mode = 0b00  # SPI mode 0
 
 # Data structures
@@ -205,7 +206,7 @@ current_fps = 0.0
 # Timing
 start_time = time.perf_counter()
 previous_time = start_time
-x, y, r = None, None, None
+x, y, z = None, None, None
 
 while True:
     # Start timer (like main_task_timer.reset() in C++)
@@ -217,122 +218,143 @@ while True:
         fps_counter += 1
         now = time.perf_counter()
         elapsed = now - fps_start_time
+        current_fps = fps_counter / elapsed
 
         if elapsed >= 1.0:  # every 1 second
-            current_fps = fps_counter / elapsed
+            # print(processing_time_ms)
+
             fps_counter = 0
             fps_start_time = now
-            print(f"BALL FPS: {current_fps:.2f}")
-            # if x is not None and y is not None and r is not None:
-            #     print(x, y, r)
+            # print(f"BALL FPS: {current_fps:.2f}")
+            if x is not None and y is not None and z is not None:
+               print(x, y, z)
+            # print("filtered setpoint x: " + str(received_data.data[2]))
+            # print("filtered setpoint y: " + str(received_data.data[3]))
 
         if pos is not None:
-            x, y, r, processing_time_ms = pos
+            x, y, z, processing_time_ms = pos
         else:
-            x, y, r, processing_time_ms = 0.0, 0.0, 0.0, 0.0
-        #print(x, y, r)
+            x, y, z, processing_time_ms = 0.0, 0.0, 0.0, 0.0
+        #print(x, y, z)
+        
+        try:
+            # ---------------- First transfer: ARM-ONLY (0x56 + zeros) ----------------
+            t_xfer1_start = time.perf_counter()
+            rx1: List[int] = spi.xfer2(tx1)  # pass bytearray directly (no list() copy)
+            t_xfer1_end = time.perf_counter()
+            xfer1_us = (t_xfer1_end - t_xfer1_start) * 1_000_000.0
 
+            # short gap so the slave can process + re-arm with fresh TX
+            # (busy-wait retained to keep "Busy" semantics unchanged)
+            t0 = time.perf_counter()
+            target = t0 + ARM_GAP_US / 1_000_000.0
+            while time.perf_counter() < target:
+                pass
 
-        # ---------------- First transfer: ARM-ONLY (0x56 + zeros) ----------------
-        t_xfer1_start = time.perf_counter()
-        rx1: List[int] = spi.xfer2(tx1)  # pass bytearray directly (no list() copy)
-        t_xfer1_end = time.perf_counter()
-        xfer1_us = (t_xfer1_end - t_xfer1_start) * 1_000_000.0
+            # ---------------- Second transfer: PUBLISH (0x55 + real payload) ---------
+            # Load/update TX payload for this frame (no-op by default; customize later)
+            #load_tx_frame(transmitted_data.data, transmitted_data.message_count)
+            transmitted_data.data[0] = x
+            transmitted_data.data[1] = y
+            transmitted_data.data[2] = z
+            transmitted_data.data[3] = processing_time_ms
+            transmitted_data.data[4] = current_fps
 
-        # short gap so the slave can process + re-arm with fresh TX
-        # (busy-wait retained to keep "Busy" semantics unchanged)
-        t0 = time.perf_counter()
-        target = t0 + ARM_GAP_US / 1_000_000.0
-        while time.perf_counter() < target:
-            pass
+            # OPTIMIZED: pack all floats in one go
+            struct.pack_into("<%df" % SPI_NUM_FLOATS, tx2, 1, *transmitted_data.data)
+            tx2[-1] = calculate_crc8(memoryview(tx2)[:-1])  # zero-copy CRC
 
-        # ---------------- Second transfer: PUBLISH (0x55 + real payload) ---------
-        # Load/update TX payload for this frame (no-op by default; customize later)
-        #load_tx_frame(transmitted_data.data, transmitted_data.message_count)
-        transmitted_data.data[0] = x
-        transmitted_data.data[1] = y
-        transmitted_data.data[2] = r
-        transmitted_data.data[3] = processing_time_ms
+            t_xfer2_start = time.perf_counter()
+            rx2: List[int] = spi.xfer2(tx2)  # pass bytearray directly
+            t_xfer2_end = time.perf_counter()
+            xfer2_us = (t_xfer2_end - t_xfer2_start) * 1_000_000.0
 
-        # OPTIMIZED: pack all floats in one go
-        struct.pack_into("<%df" % SPI_NUM_FLOATS, tx2, 1, *transmitted_data.data)
-        tx2[-1] = calculate_crc8(memoryview(tx2)[:-1])  # zero-copy CRC
+            # Prefer the second reply (fresh data). Do NOT fallback to the first.
+            if not (len(rx2) == SPI_MSG_SIZE and verify_checksum_seq(rx2) and rx2[0] == SPI_HEADER_SLAVE):
+                received_data.failed_count += 1
+                # Skip processing this cycle; compute busy/sleep for print
+                main_task_elapsed_time_us = (time.perf_counter() - cycle_start_time) * 1_000_000.0
+                remaining_us = main_task_period_us - main_task_elapsed_time_us
+                if remaining_us < 0:
+                    sleep_us = 0.0
+                    print(f"Warning: Main task took longer than main_task_period_ms | Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us | Failed: {received_data.failed_count}")
+                else:
+                    time.sleep(remaining_us / 1_000_000.0)
+                    sleep_us = remaining_us
+                    # print(f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us | Failed: {received_data.failed_count}")
+                continue
 
-        t_xfer2_start = time.perf_counter()
-        rx2: List[int] = spi.xfer2(tx2)  # pass bytearray directly
-        t_xfer2_end = time.perf_counter()
-        xfer2_us = (t_xfer2_end - t_xfer2_start) * 1_000_000.0
+            rx: List[int] = rx2
 
-        # Prefer the second reply (fresh data). Do NOT fallback to the first.
-        if not (len(rx2) == SPI_MSG_SIZE and verify_checksum_seq(rx2) and rx2[0] == SPI_HEADER_SLAVE):
-            received_data.failed_count += 1
-            # Skip processing this cycle; compute busy/sleep for print
+            # ---------------- Process selected received message ----------------------
+            header_received: int = rx[0]
+
+            # Verify checksum (already checked above) and extract data
+            # OPTIMIZED: bulk unpack; convert list->bytearray once for struct
+            rx_ba = bytearray(rx)
+            floats_tuple = struct.unpack_from("<%df" % SPI_NUM_FLOATS, rx_ba, 1)
+            # keep same list object (avoids reallocation churn)
+            received_data.data[:] = floats_tuple
+
+            received_data.message_count += 1
+            
+            # Measure elapsed time between valid messages
+            current_time = time.perf_counter()
+            delta_time_us = int((current_time - previous_time) * 1_000_000)
+            previous_time = current_time
+            received_data.last_delta_time_us = delta_time_us
+
+            transmitted_data.message_count += 1
+            """
+            # Read timer and compute sleep before printing
             main_task_elapsed_time_us = (time.perf_counter() - cycle_start_time) * 1_000_000.0
             remaining_us = main_task_period_us - main_task_elapsed_time_us
             if remaining_us < 0:
                 sleep_us = 0.0
-                print(f"Warning: Main task took longer than main_task_period_ms | Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us | Failed: {received_data.failed_count}")
+                print(
+                    f"Message: {received_data.message_count} | "
+                    f"Delta Time: {delta_time_us} us | "
+                    f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
+                    f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}; "
+                    f"acc: {received_data.data[6]:.4f}, {received_data.data[7]:.4f}, {received_data.data[8]:.4f}] | "
+                    f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
+                    f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
+                    f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
+                )
+                print("Warning: Main task took longer than main_task_period_ms")
             else:
                 time.sleep(remaining_us / 1_000_000.0)
                 sleep_us = remaining_us
-                print(f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us | Failed: {received_data.failed_count}")
+                
+                print(
+                    f"Message: {received_data.message_count} | "
+                    f"Delta Time: {delta_time_us} us | "
+                    f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
+                    f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}; "
+                    f"acc: {received_data.data[6]:.4f}, {received_data.data[7]:.4f}, {received_data.data[8]:.4f}] | "
+                    f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
+                    f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
+                    f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
+                )"""
+            
+            
+            # print("pitch: " + str(received_data.data[0]))
+            # print("roll: " + str(received_data.data[1]))
+        except OSError as e:
+            # HIER WIRD DER CRASH VERHINDERT!
+            print(f"SPI Hardware-Fehler (Nucleo flasht?): {e}")
+            time.sleep(0.5) # Gib dem Nucleo eine halbe Sekunde zum Neustarten
+            received_data.failed_count += 1
+            continue # Springe zum Anfang der while-Schleife
+        except Exception as e:
+            # Falls irgendetwas anderes schiefgeht
+            print(f"Unerwarteter SPI-Fehler: {e}")
+            time.sleep(0.5)
+            received_data.failed_count += 1
             continue
 
-        rx: List[int] = rx2
 
-        # ---------------- Process selected received message ----------------------
-        header_received: int = rx[0]
 
-        # Verify checksum (already checked above) and extract data
-        # OPTIMIZED: bulk unpack; convert list->bytearray once for struct
-        rx_ba = bytearray(rx)
-        floats_tuple = struct.unpack_from("<%df" % SPI_NUM_FLOATS, rx_ba, 1)
-        # keep same list object (avoids reallocation churn)
-        received_data.data[:] = floats_tuple
-
-        received_data.message_count += 1
-        
-        # Measure elapsed time between valid messages
-        current_time = time.perf_counter()
-        delta_time_us = int((current_time - previous_time) * 1_000_000)
-        previous_time = current_time
-        received_data.last_delta_time_us = delta_time_us
-
-        transmitted_data.message_count += 1
-        """
-        # Read timer and compute sleep before printing
-        main_task_elapsed_time_us = (time.perf_counter() - cycle_start_time) * 1_000_000.0
-        remaining_us = main_task_period_us - main_task_elapsed_time_us
-        if remaining_us < 0:
-            sleep_us = 0.0
-            print(
-                f"Message: {received_data.message_count} | "
-                f"Delta Time: {delta_time_us} us | "
-                f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
-                f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}; "
-                f"acc: {received_data.data[6]:.4f}, {received_data.data[7]:.4f}, {received_data.data[8]:.4f}] | "
-                f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
-                f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
-                f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
-            )
-            print("Warning: Main task took longer than main_task_period_ms")
-        else:
-            time.sleep(remaining_us / 1_000_000.0)
-            sleep_us = remaining_us
-            
-            print(
-                f"Message: {received_data.message_count} | "
-                f"Delta Time: {delta_time_us} us | "
-                f"Received: [servos: {received_data.data[0]:.4f}, {received_data.data[1]:.4f}, {received_data.data[2]:.4f}; "
-                f"gyro: {received_data.data[3]:.4f}, {received_data.data[4]:.4f}, {received_data.data[5]:.4f}; "
-                f"acc: {received_data.data[6]:.4f}, {received_data.data[7]:.4f}, {received_data.data[8]:.4f}] | "
-                f"Header: 0x{header_received:02X} | Failed: {received_data.failed_count} | "
-                f"Busy: {int(main_task_elapsed_time_us)} us | Sleep: {int(sleep_us)} us | "
-                f"Xfer1: {int(xfer1_us)} us | Xfer2: {int(xfer2_us)} us"
-            )"""
-        
-        print(received_data.data[0])
-        print(received_data.data[1])
     main_task_elapsed_time_us = (time.perf_counter() - cycle_start_time) * 1_000_000.0
     remaining_us = main_task_period_us - main_task_elapsed_time_us
     if remaining_us < 0:
