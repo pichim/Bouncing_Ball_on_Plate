@@ -8,3 +8,5 @@ BUILD
 mbed-os
 docs/review
 __pycache__
+venv
+.venv
