@@ -4,6 +4,8 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/settings.json
+.venv
+venv
 BUILD
 mbed-os
 docs/review
